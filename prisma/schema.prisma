@@ -1,0 +1,234 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+enum CancellationActor {
+  CLIENT
+  WASHER
+  SYSTEM
+}
+
+enum UserRole {
+  CLIENT
+  WASHER
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  ARRIVED
+  IN_PROGRESS
+  AWAITING_CLIENT_CONFIRMATION
+  COMPLETED
+  CANCELLED
+}
+
+enum WasherStatus {
+  OFFLINE
+  AVAILABLE
+  BUSY
+}
+
+enum VehicleSize {
+  SMALL
+  MEDIUM
+  SUV
+  VAN
+}
+
+enum WashType {
+  BASIC
+  PREMIUM
+  VIP
+}
+
+enum VehicleCategory {
+  CITY_CAR        // Citadine, berline, SUV simple
+  LARGE_VEHICLE   // SUV grand, 4x4, pickup, van, mini-camion
+  MOTORCYCLE      // Moto, quad
+}
+
+enum WasherCancellationReason {
+  MECHANICAL_ISSUE
+  PERSONAL_EMERGENCY
+  HEALTH_ISSUE
+  OTHER
+}
+model User {
+  id           String   @id @default(cuid())
+  phone        String   @unique
+  email        String?  @unique
+  pushToken     String?
+  pushTokenAt   DateTime?
+  passwordHash String
+  fullName     String
+  role         UserRole
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  clientBookings Booking[]      @relation("ClientBookings")
+  washerProfile  WasherProfile?
+  vehicles       Vehicle[]
+  ratingsGiven   Rating[]       @relation("RatingAuthor")
+
+  @@index([role])
+}
+
+model WasherProfile {
+  id             String       @id @default(cuid())
+  userId         String       @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         WasherStatus @default(OFFLINE)
+  currentLat     Float?
+  currentLng     Float?
+  lastLocationAt DateTime?
+
+  // Identité & équipement
+  cinPhotoUrl       String?                   // ← URL photo CIN (Cloudinary)
+  equipmentType     EquipmentType?            // ← type d'équipement
+  licensePlate      String?                   // ← plaque (optionnel si MOBILE)
+
+  // Vérification
+  isVerified           Boolean                  @default(false)
+  verificationStatus   WasherVerificationStatus @default(PENDING)
+  verificationNote     String?                  // ← note de rejet admin
+  verifiedAt           DateTime?               // ← date d'activation
+  verifiedBy           String?                 // ← userId admin qui a validé
+
+  avgRating      Float        @default(0)
+  totalBookings  Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  bookings Booking[] @relation("WasherBookings")
+  offers   WasherOffer[]
+
+  @@index([status])
+  @@index([verificationStatus])
+}
+
+model Vehicle {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand     String
+  model     String
+  plate     String
+  size      VehicleSize
+  category  VehicleCategory?
+  createdAt DateTime    @default(now())
+
+  bookings Booking[]
+}
+
+model Booking {
+  id           String         @id @default(cuid())
+  clientId     String
+  client       User           @relation("ClientBookings", fields: [clientId], references: [id])
+  washerId     String?
+  washer       WasherProfile? @relation("WasherBookings", fields: [washerId], references: [id])
+  vehicleId    String
+  vehicle      Vehicle        @relation(fields: [vehicleId], references: [id])
+
+  addressLabel String
+  lat          Float
+  lng          Float
+
+  scheduledAt  DateTime
+  acceptedAt   DateTime?
+  arrivedAt    DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  status       BookingStatus  @default(PENDING)
+  priceMAD     Int
+  washType             WashType                  @default(BASIC)
+  estimatedDurationMin Int?                      // ETA en minutes (calculé)
+  washerCancelReason   WasherCancellationReason? // si laveur annule, motif
+  reopenedAt           DateTime?                 // si laveur annule, on rouvre en PENDING
+  notes        String?
+
+  cancellationReason String?
+  cancelledBy        CancellationActor?
+
+  photosBefore String[]
+  photosAfter  String[]
+
+  rating       Rating?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([status, scheduledAt])
+  @@index([washerId, status])
+  @@index([clientId])
+  offers      WasherOffer[]
+  expiresAt   DateTime?    @db.Timestamptz(3)
+}
+
+model Rating {
+  id        String   @id @default(cuid())
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("RatingAuthor", fields: [authorId], references: [id])
+  score     Int
+  comment   String?
+  createdAt DateTime @default(now())
+}
+model WasherOffer {
+  id           String   @id @default(cuid())
+  bookingId    String
+  booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  washerId     String
+  washer       WasherProfile @relation(fields: [washerId], references: [id], onDelete: Cascade)
+  proposedPriceMAD Int           // prix proposé en centimes
+  estimatedEtaMin  Int           // ETA estimée à la création de l'offre
+  status       OfferStatus   @default(PENDING)
+  createdAt    DateTime   @default(now())
+
+  @@unique([bookingId, washerId]) // un laveur fait UNE seule offre par booking
+  @@index([bookingId, status])
+  @@index([washerId, status])
+}
+model OtpCode {
+  id        String     @id @default(cuid())
+  phone     String
+  code      String
+  purpose   OtpPurpose
+  expiresAt DateTime
+  verified  Boolean    @default(false)
+  createdAt DateTime   @default(now())
+
+  @@index([phone, purpose])
+}
+
+enum OfferStatus {
+  PENDING       // en attente du choix du client
+  ACCEPTED      // choisie par le client
+  REJECTED      // une autre offre a été choisie
+  EXPIRED       // les 5 min sont écoulées sans choix
+}
+enum EquipmentType {
+  TRIPORTEUR      // Triporteur motorisé
+  MINIVAN         // Mini van
+  MOBILE          // Se déplace avec matériel (moto, à pied, etc.)
+}
+
+enum WasherVerificationStatus {
+  PENDING         // En attente de validation admin
+  APPROVED        // Approuvé
+  REJECTED        // Rejeté
+}
+
+enum OtpPurpose {
+  PHONE_VERIFICATION
+  PASSWORD_RESET
+}
