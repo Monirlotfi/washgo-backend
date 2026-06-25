@@ -1,15 +1,23 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+//import * as compression from 'compression';
+import compression from 'compression';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    //bufferLogs: true,
+    //snapshot: true,
+  });
 
   // 1. Fully allows incoming connections from mobile platforms
   app.enableCors({
     origin: true,
     credentials: true,
   });
+
+  // 1b. Compression des réponses JSON (réduit latence réseau)
+  app.use(compression());
 
   // 2. Strict type parsing and DTO filtering
   app.useGlobalPipes(
@@ -29,6 +37,6 @@ async function bootstrap() {
   await app.listen(port, '0.0.0.0');
   
   console.log(`🚀 WashGo API running on http://localhost:${port}/api/v1`);
-  console.log(`🌐 Accessible on local network at http://192.168.1.11:${port}/api/v1`);
+  console.log(`🌐 Accessible on local network at http://192.168.1.17:${port}/api/v1`);
 }
 bootstrap();

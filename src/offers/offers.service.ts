@@ -33,9 +33,23 @@ export class OffersService {
     bookingId: string,
     dto: CreateOfferDto,
   ) {
-    const profile = await this.prisma.washerProfile.findUnique({
-      where: { userId },
-    });
+    //const profile = await this.prisma.washerProfile.findUnique({
+    //  where: { userId },
+    //});
+    const [profile, booking] = await Promise.all([
+      this.prisma.washerProfile.findUnique({
+        where: { userId },
+        select: {
+          id: true, isVerified: true, status: true,
+          currentLat: true, currentLng: true,
+          user: { select: { fullName: true } },
+        },
+      }),
+      this.prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: { id: true, status: true, expiresAt: true, lat: true, lng: true, clientId: true },
+      }),
+    ]);
     if (!profile) {
       throw new ForbiddenException('Profil laveur introuvable');
     }
@@ -55,9 +69,9 @@ export class OffersService {
       );
     }
 
-    const booking = await this.prisma.booking.findUnique({
-      where: { id: bookingId },
-    });
+    //const booking = await this.prisma.booking.findUnique({
+    //  where: { id: bookingId },
+    //});
     if (!booking) throw new NotFoundException('Réservation introuvable');
     if (booking.status !== BookingStatus.PENDING) {
       throw new BadRequestException("Cette course n'accepte plus d'offres");
@@ -73,6 +87,7 @@ export class OffersService {
           washerId: profile.id,
         },
       },
+      select: { id: true },
     });
     if (existing) {
       throw new ConflictException(
@@ -98,25 +113,24 @@ export class OffersService {
     });
 
     // Notif au client : nouvelle offre reçue
-    const [washer, bookingForNotif] = await Promise.all([
-      this.prisma.washerProfile.findUnique({
-        where: { id: profile.id },
-        include: { user: { select: { fullName: true } } },
-      }),
-      this.prisma.booking.findUnique({
-        where: { id: bookingId },
-        select: { clientId: true },
-      }),
-    ]);
-
-    if (washer && bookingForNotif) {
+    //const [washer, bookingForNotif] = await Promise.all([
+    //  this.prisma.washerProfile.findUnique({
+    //    where: { id: profile.id },
+    //    include: { user: { select: { fullName: true } } },
+    //  }),
+    //  this.prisma.booking.findUnique({
+    //    where: { id: bookingId },
+    //    select: { clientId: true },
+    //  }),
+    //]);
+    if (profile.user && booking.clientId) {
       this.notifications
         .enqueue(
           NotificationMessages.offerReceived({
-            userId: bookingForNotif.clientId,
+            userId: booking.clientId,
             bookingId,
             offerId: offer.id,
-            washerName: washer.user.fullName,
+            washerName: profile.user.fullName,
             proposedPriceMAD: offer.proposedPriceMAD,
             etaMin: offer.estimatedEtaMin,
           }),
@@ -137,8 +151,12 @@ export class OffersService {
     bookingId: string,
     offerId: string,
   ) {
+    //const booking = await this.prisma.booking.findUnique({
+    //  where: { id: bookingId },
+    //});
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
+      select: { id: true, clientId: true, status: true, expiresAt: true },
     });
     if (!booking) throw new NotFoundException('Réservation introuvable');
     if (booking.clientId !== clientId) {
@@ -151,9 +169,19 @@ export class OffersService {
       throw new BadRequestException('Délai expiré pour choisir un laveur');
     }
 
+    //const offer = await this.prisma.washerOffer.findUnique({
+    //  where: { id: offerId },
+    //  include: { washer: true },
+    //});
     const offer = await this.prisma.washerOffer.findUnique({
       where: { id: offerId },
-      include: { washer: true },
+      select: {
+        id: true, bookingId: true, washerId: true, status: true,
+        proposedPriceMAD: true, estimatedEtaMin: true,
+        washer: {
+          select: { id: true, status: true, userId: true },
+        },
+      },
     });
     if (!offer || offer.bookingId !== bookingId) {
       throw new NotFoundException('Offre introuvable');
@@ -267,8 +295,16 @@ export class OffersService {
    * Le client liste les offres reçues sur son booking.
    */
   async listOffersForBooking(clientId: string, bookingId: string) {
+    //const booking = await this.prisma.booking.findUnique({
+    //  where: { id: bookingId },
+    //});
+    //if (!booking) throw new NotFoundException('Réservation introuvable');
+    //if (booking.clientId !== clientId) {
+    //  throw new ForbiddenException('Cette réservation ne vous appartient pas');
+    //}
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
+      select: { clientId: true },
     });
     if (!booking) throw new NotFoundException('Réservation introuvable');
     if (booking.clientId !== clientId) {
@@ -280,14 +316,26 @@ export class OffersService {
         bookingId,
         status: OfferStatus.PENDING,
       },
-      include: {
+      //include: {
+      //  washer: {
+      //    select: {
+      //      id: true,
+      //      avgRating: true,
+      //      totalBookings: true,
+      //      currentLat: true,
+      //      currentLng: true,
+      //      user: { select: { fullName: true } },
+      //    },
+      //  },
+      //},
+      select: {
+        id: true, bookingId: true, washerId: true,
+        proposedPriceMAD: true, estimatedEtaMin: true,
+        status: true, createdAt: true,
         washer: {
           select: {
-            id: true,
-            avgRating: true,
-            totalBookings: true,
-            currentLat: true,
-            currentLng: true,
+            id: true, avgRating: true, totalBookings: true,
+            currentLat: true, currentLng: true,
             user: { select: { fullName: true } },
           },
         },
@@ -300,8 +348,12 @@ export class OffersService {
    * Le laveur liste ses propres offres en cours (statut PENDING).
    */
   async listMyPendingOffers(userId: string) {
+    //const profile = await this.prisma.washerProfile.findUnique({
+    //  where: { userId },
+    //});
     const profile = await this.prisma.washerProfile.findUnique({
       where: { userId },
+      select: { id: true },
     });
     if (!profile) throw new NotFoundException('Profil laveur introuvable');
 
@@ -313,11 +365,24 @@ export class OffersService {
           status: BookingStatus.PENDING,
         },
       },
-      include: {
+      //include: {
+      //  booking: {
+      //    include: {
+      //      client: { select: { fullName: true } },
+      //      vehicle: true,
+      //    },
+      //  },
+      //},
+      select: {
+        id: true, bookingId: true, washerId: true,
+        proposedPriceMAD: true, estimatedEtaMin: true,
+        status: true, createdAt: true,
         booking: {
-          include: {
+          select: {
+            id: true, addressLabel: true, lat: true, lng: true,
+            priceMAD: true, status: true, expiresAt: true,
             client: { select: { fullName: true } },
-            vehicle: true,
+            vehicle: { select: { brand: true, model: true, plate: true, size: true } },
           },
         },
       },

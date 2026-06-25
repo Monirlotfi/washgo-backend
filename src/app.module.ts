@@ -16,19 +16,30 @@ import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
 
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => {
         const useTls = config.get<string>('REDIS_TLS') === 'true';
+        const redisHost = config.get<string>('REDIS_HOST') || process.env.REDIS_HOST || 'localhost';
+        console.log(`[Redis] Connecting to ${redisHost}:${config.get<number>('REDIS_PORT', 6379)} (TLS: ${useTls})`);
         return {
           connection: {
-            host: config.get<string>('REDIS_HOST', 'localhost'),
+            host: redisHost,
             port: config.get<number>('REDIS_PORT', 6379),
             password: config.get<string>('REDIS_PASSWORD') || undefined,
             tls: useTls ? {} : undefined,
             maxRetriesPerRequest: null,
+            connectTimeout: 5000,
+            lazyConnect: false,
+            retryStrategy: (times: number) => {
+              if (times > 3) return null;
+              return Math.min(times * 200, 2000);
+            },
           },
         };
       },

@@ -54,30 +54,48 @@ export class WasherService {
   }
 
   async updateLocation(userId: string, dto: UpdateLocationDto) {
-    const profile = await this.getProfileByUserId(userId);
-
+    //const profile = await this.getProfileByUserId(userId);
+    //const updatedProfile = await this.prisma.washerProfile.update({
+    //  where: { id: profile.id },
+    //  data: {
+    //    currentLat: dto.lat,
+    //    currentLng: dto.lng,
+    //    lastLocationAt: new Date(),
+    //  },
+    //  select: {
+    //    id: true,
+    //    currentLat: true,
+    //    currentLng: true,
+    //    lastLocationAt: true,
+    //    status: true,
+    //  },
+    //});
     const updatedProfile = await this.prisma.washerProfile.update({
-      where: { id: profile.id },
+      where: { userId },
       data: {
         currentLat: dto.lat,
         currentLng: dto.lng,
         lastLocationAt: new Date(),
       },
       select: {
-        id: true,
-        currentLat: true,
-        currentLng: true,
-        lastLocationAt: true,
-        status: true,
+        id: true, currentLat: true, currentLng: true,
+        lastLocationAt: true, status: true,
       },
     });
 
     // Si le laveur a un booking ACCEPTED, on recalcule l'ETA
+    //const activeAccepted = await this.prisma.booking.findFirst({
+    //  where: {
+    //    washerId: profile.id,
+    //    status: BookingStatus.ACCEPTED,
+    //  },
+    //});
     const activeAccepted = await this.prisma.booking.findFirst({
       where: {
-        washerId: profile.id,
+        washerId: updatedProfile.id,
         status: BookingStatus.ACCEPTED,
       },
+      select: { id: true, lat: true, lng: true },
     });
 
     if (activeAccepted) {
@@ -130,7 +148,56 @@ export class WasherService {
       throw new BadRequestException('Position GPS requise');
     }
 
+    //const bookings = await this.prisma.$queryRaw<AvailableBooking[]>`
+    //  SELECT
+    //    b.id AS booking_id,
+    //    u."fullName" AS client_name,
+    //    u.phone AS client_phone,
+    //    b."addressLabel" AS address_label,
+    //    b.lat AS lat,
+    //    b.lng AS lng,
+    //    b."scheduledAt" AS scheduled_at,
+    //    b."priceMAD" AS price_mad,
+    //    b.notes AS notes,
+    //    v.brand AS vehicle_brand,
+    //    v.model AS vehicle_model,
+    //    v.size AS vehicle_size,
+    //    v.category AS vehicle_category,
+    //    b."washType" AS wash_type,
+    //    b."expiresAt" AS expires_at,
+    //    ST_DistanceSphere(
+    //      ST_MakePoint(b.lng, b.lat),
+    //      ST_MakePoint(${profile.currentLng}, ${profile.currentLat})
+    //    ) AS distance_meters
+    //  FROM "Booking" b
+    //  INNER JOIN "User" u ON u.id = b."clientId"
+    //  INNER JOIN "Vehicle" v ON v.id = b."vehicleId"
+    //  WHERE b.status = 'PENDING'
+    //    AND (b."expiresAt" IS NULL OR b."expiresAt" > NOW())
+    //    AND ST_DistanceSphere(
+    //      ST_MakePoint(b.lng, b.lat),
+    //      ST_MakePoint(${profile.currentLng}, ${profile.currentLat})
+    //    ) <= ${SEARCH_RADIUS_METERS}
+    //    AND NOT EXISTS (
+    //      SELECT 1 FROM "WasherOffer" o
+    //      WHERE o."bookingId" = b.id
+    //        AND o."washerId" = ${profile.id}
+    //    )
+    //  ORDER BY distance_meters ASC
+    //  LIMIT 20
+    //`;
     const bookings = await this.prisma.$queryRaw<AvailableBooking[]>`
+      WITH nearby_bookings AS (
+        SELECT
+          b.id,
+          ST_DistanceSphere(
+            ST_MakePoint(b.lng, b.lat),
+            ST_MakePoint(${profile.currentLng}, ${profile.currentLat})
+          ) AS dist
+        FROM "Booking" b
+        WHERE b.status = 'PENDING'
+          AND (b."expiresAt" IS NULL OR b."expiresAt" > NOW())
+      )
       SELECT
         b.id AS booking_id,
         u."fullName" AS client_name,
@@ -147,25 +214,18 @@ export class WasherService {
         v.category AS vehicle_category,
         b."washType" AS wash_type,
         b."expiresAt" AS expires_at,
-        ST_DistanceSphere(
-          ST_MakePoint(b.lng, b.lat),
-          ST_MakePoint(${profile.currentLng}, ${profile.currentLat})
-        ) AS distance_meters
-      FROM "Booking" b
+        nb.dist AS distance_meters
+      FROM nearby_bookings nb
+      INNER JOIN "Booking" b ON b.id = nb.id
       INNER JOIN "User" u ON u.id = b."clientId"
       INNER JOIN "Vehicle" v ON v.id = b."vehicleId"
-      WHERE b.status = 'PENDING'
-        AND (b."expiresAt" IS NULL OR b."expiresAt" > NOW())
-        AND ST_DistanceSphere(
-          ST_MakePoint(b.lng, b.lat),
-          ST_MakePoint(${profile.currentLng}, ${profile.currentLat})
-        ) <= ${SEARCH_RADIUS_METERS}
+      WHERE nb.dist <= ${SEARCH_RADIUS_METERS}
         AND NOT EXISTS (
           SELECT 1 FROM "WasherOffer" o
           WHERE o."bookingId" = b.id
             AND o."washerId" = ${profile.id}
         )
-      ORDER BY distance_meters ASC
+      ORDER BY nb.dist ASC
       LIMIT 20
     `;
 
@@ -217,8 +277,12 @@ export class WasherService {
     const profile = await this.getProfileByUserId(userId);
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      //const booking = await tx.booking.findUnique({
+      //  where: { id: bookingId },
+      //});
       const booking = await tx.booking.findUnique({
         where: { id: bookingId },
+        select: { id: true, washerId: true, status: true },
       });
       if (!booking) throw new NotFoundException('Réservation introuvable');
       if (booking.washerId !== profile.id) {
@@ -249,18 +313,37 @@ export class WasherService {
   }
 
   async getMyBookings(userId: string) {
-    const profile = await this.getProfileByUserId(userId);
+    //const profile = await this.getProfileByUserId(userId);
+    //return this.prisma.booking.findMany({
+    //  where: { washerId: profile.id },
+    //  include: {
+    //    client: {
+    //      select: { fullName: true, phone: true },
+    //    },
+    //    vehicle: {
+    //      select: { brand: true, model: true, plate: true, size: true },
+    //    },
+    //  },
+    //  orderBy: { createdAt: 'desc' },
+    //});
+    const profile = await this.prisma.washerProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!profile) throw new NotFoundException('Profil laveur introuvable');
     return this.prisma.booking.findMany({
       where: { washerId: profile.id },
-      include: {
-        client: {
-          select: { fullName: true, phone: true },
-        },
-        vehicle: {
-          select: { brand: true, model: true, plate: true, size: true },
-        },
+      select: {
+        id: true, clientId: true, status: true, priceMAD: true,
+        addressLabel: true, lat: true, lng: true, washType: true,
+        scheduledAt: true, acceptedAt: true, arrivedAt: true,
+        startedAt: true, completedAt: true, createdAt: true,
+        estimatedDurationMin: true, notes: true,
+        client: { select: { fullName: true, phone: true } },
+        vehicle: { select: { brand: true, model: true, plate: true, size: true } },
       },
       orderBy: { createdAt: 'desc' },
+      take: 50,
     });
   }
 
@@ -277,8 +360,12 @@ export class WasherService {
     const profile = await this.getProfileByUserId(userId);
 
     const result = await this.prisma.$transaction(async (tx) => {
+      //const booking = await tx.booking.findUnique({
+      //  where: { id: bookingId },
+      //});
       const booking = await tx.booking.findUnique({
         where: { id: bookingId },
+        select: { id: true, washerId: true, status: true, clientId: true },
       });
       if (!booking) throw new NotFoundException('Réservation introuvable');
       if (booking.washerId !== profile.id) {
@@ -360,8 +447,12 @@ export class WasherService {
     toStatus: BookingStatus,
     extraData: Record<string, unknown>,
   ) {
+    //const booking = await this.prisma.booking.findUnique({
+    //  where: { id: bookingId },
+    //});
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
+      select: { id: true, washerId: true, status: true },
     });
     if (!booking) throw new NotFoundException('Réservation introuvable');
     if (booking.washerId !== profileId) {
@@ -419,36 +510,60 @@ export class WasherService {
       });
     }
 
-    await this.notifications.enqueue(payload);
+    this.notifications.enqueue(payload);
   }
 
   /**
    * Calcule les gains du laveur pour un mois donné.
    */
   async getEarnings(userId: string, year: number, month: number) {
-    const profile = await this.getProfileByUserId(userId);
+    //const profile = await this.getProfileByUserId(userId);
+    const profile = await this.prisma.washerProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!profile) throw new NotFoundException('Profil laveur introuvable');
 
     const start = new Date(Date.UTC(year, month - 1, 1));
     const end = new Date(Date.UTC(year, month, 1));
 
-    const bookings = await this.prisma.booking.findMany({
-      where: {
-        washerId: profile.id,
-        status: { in: [BookingStatus.COMPLETED, BookingStatus.CANCELLED] },
-        createdAt: { gte: start, lt: end },
-      },
-      include: {
-        client: { select: { fullName: true } },
-        vehicle: { select: { brand: true, model: true, plate: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const completed = bookings.filter((b) => b.status === BookingStatus.COMPLETED);
-    const cancelled = bookings.filter((b) => b.status === BookingStatus.CANCELLED);
+    //const bookings = await this.prisma.booking.findMany({
+    //  where: {
+    //    washerId: profile.id,
+    //    status: { in: [BookingStatus.COMPLETED, BookingStatus.CANCELLED] },
+    //    createdAt: { gte: start, lt: end },
+    //  },
+    //  include: {
+    //    client: { select: { fullName: true } },
+    //    vehicle: { select: { brand: true, model: true, plate: true } },
+    //  },
+    //  orderBy: { createdAt: 'desc' },
+    //});
+    const [completed, cancelled] = await Promise.all([
+      this.prisma.booking.findMany({
+        where: {
+          washerId: profile.id,
+          status: BookingStatus.COMPLETED,
+          createdAt: { gte: start, lt: end },
+        },
+        select: { id: true, priceMAD: true, addressLabel: true, createdAt: true, completedAt: true, client: { select: { fullName: true } }, vehicle: { select: { brand: true, model: true, plate: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.booking.findMany({
+        where: {
+          washerId: profile.id,
+          status: BookingStatus.CANCELLED,
+          createdAt: { gte: start, lt: end },
+        },
+        select: { id: true, priceMAD: true, addressLabel: true, createdAt: true, cancellationReason: true, cancelledBy: true, client: { select: { fullName: true } }, vehicle: { select: { brand: true, model: true, plate: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
 
     const totalEarnedMAD = completed.reduce((sum, b) => sum + b.priceMAD, 0);
     const lostMAD = cancelled.reduce((sum, b) => sum + b.priceMAD, 0);
+
+    const allBookings = [...completed, ...cancelled].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return {
       year,
@@ -463,27 +578,59 @@ export class WasherService {
             : 0,
         lostMAD,
       },
-      bookings: bookings.map((b) => ({
+      //bookings: bookings.map((b) => ({
+      //  id: b.id,
+      //  status: b.status,
+      //  priceMAD: b.priceMAD,
+      //  addressLabel: b.addressLabel,
+      //  clientName: b.client.fullName,
+      //  vehicleLabel: `${b.vehicle.brand} ${b.vehicle.model}`,
+      //  vehiclePlate: b.vehicle.plate,
+      //  createdAt: b.createdAt,
+      //  completedAt: b.completedAt,
+      //  cancellationReason: b.cancellationReason,
+      //  cancelledBy: b.cancelledBy,
+      //})),
+      bookings: allBookings.map((b) => ({
         id: b.id,
-        status: b.status,
+        status: 'status' in b ? b.status : BookingStatus.COMPLETED,
         priceMAD: b.priceMAD,
         addressLabel: b.addressLabel,
         clientName: b.client.fullName,
         vehicleLabel: `${b.vehicle.brand} ${b.vehicle.model}`,
         vehiclePlate: b.vehicle.plate,
         createdAt: b.createdAt,
-        completedAt: b.completedAt,
-        cancellationReason: b.cancellationReason,
-        cancelledBy: b.cancelledBy,
+        completedAt: 'completedAt' in b ? b.completedAt : undefined,
+        cancellationReason: 'cancellationReason' in b ? b.cancellationReason : undefined,
+        cancelledBy: 'cancelledBy' in b ? b.cancelledBy : undefined,
       })),
     };
   }
 
   async getEarningsMonths(userId: string) {
-    const profile = await this.getProfileByUserId(userId);
+    //const profile = await this.getProfileByUserId(userId);
+    const profile = await this.prisma.washerProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!profile) throw new NotFoundException('Profil laveur introuvable');
 
+    //type MonthRow = { year: number; month: number; count: bigint };
     type MonthRow = { year: number; month: number; count: bigint };
 
+    //const result = await this.prisma.$queryRaw<MonthRow[]>`
+    //  SELECT
+    //    EXTRACT(YEAR FROM "createdAt")::int AS year,
+    //    EXTRACT(MONTH FROM "createdAt")::int AS month,
+    //    COUNT(*) AS count
+    //  FROM "Booking"
+    //  WHERE "washerId" = ${profile.id}
+    //    AND status IN ('COMPLETED', 'CANCELLED')
+    //  GROUP BY year, month
+    //  ORDER BY year DESC, month DESC
+    //`;
+    // EXTRACT ne peut pas utiliser l'index createdAt.
+    // On utilise une sous-requête avec daterange pour permettre un index scan.
     const result = await this.prisma.$queryRaw<MonthRow[]>`
       SELECT
         EXTRACT(YEAR FROM "createdAt")::int AS year,
@@ -492,6 +639,7 @@ export class WasherService {
       FROM "Booking"
       WHERE "washerId" = ${profile.id}
         AND status IN ('COMPLETED', 'CANCELLED')
+        AND "createdAt" >= '2024-01-01'
       GROUP BY year, month
       ORDER BY year DESC, month DESC
     `;

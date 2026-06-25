@@ -37,8 +37,23 @@ export class AuthService {
       );
     }
 
-    await this.ensurePhoneIsFree(dto.phone);
-    if (dto.email) await this.ensureEmailIsFree(dto.email);
+    //await this.ensurePhoneIsFree(dto.phone);
+    //if (dto.email) await this.ensureEmailIsFree(dto.email);
+    const existing = await this.prisma.user.findMany({
+      where: {
+        OR: [
+          { phone: dto.phone },
+          ...(dto.email ? [{ email: dto.email }] : []),
+        ],
+      },
+      select: { phone: true, email: true },
+    });
+    if (existing.some((u) => u.phone === dto.phone)) {
+      throw new ConflictException('Ce numéro est déjà utilisé');
+    }
+    if (dto.email && existing.some((u) => u.email === dto.email)) {
+      throw new ConflictException('Cet email est déjà utilisé');
+    }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
@@ -73,17 +88,24 @@ export class AuthService {
       );
     }
 
-    await this.ensurePhoneIsFree(dto.phone);
+    //await this.ensurePhoneIsFree(dto.phone);
+    const existingPhone = await this.prisma.user.findUnique({
+      where: { phone: dto.phone },
+      select: { id: true },
+    });
+    if (existingPhone) throw new ConflictException('Ce numéro est déjà utilisé');
 
     // 2. Upload photo CIN sur Cloudinary
     if (!cinPhotoBuffer) {
       throw new BadRequestException('Photo CIN requise');
     }
 
-    const cinPhotoUrl = await this.cloudinary.uploadBuffer(
-      cinPhotoBuffer,
-      'washgo/cin',
-    );
+    const cinPhotoUrl = await Promise.race([
+      this.cloudinary.uploadBuffer(cinPhotoBuffer, 'washgo/cin'),
+      new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('Cloudinary timeout after 10s')), 10_000),
+      ),
+    ]);
 
     // 3. Crée le compte (non vérifié — en attente admin)
     const passwordHash = await bcrypt.hash(dto.password, 10);
