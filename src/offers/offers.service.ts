@@ -135,7 +135,7 @@ export class OffersService {
             etaMin: offer.estimatedEtaMin,
           }),
         )
-        .catch((err) => console.error('Erreur notif:', err));
+        .catch((err: any) => console.error('Erreur notif:', err));
     }
 
     return offer;
@@ -285,7 +285,7 @@ export class OffersService {
     if (notifPayloads.length > 0) {
       this.notifications
         .enqueueMany(notifPayloads)
-        .catch((err) => console.error('Erreur notif:', err));
+        .catch((err: any) => console.error('Erreur notif:', err));
     }
 
     return updated;
@@ -405,22 +405,26 @@ export class OffersService {
       select: { id: true },
     });
 
-    for (const b of expired) {
-      await this.prisma.$transaction(async (tx) => {
-        await tx.booking.update({
-          where: { id: b.id },
-          data: {
-            status: BookingStatus.CANCELLED,
-            cancellationReason: 'Aucun laveur choisi dans le délai imparti',
-            cancelledBy: 'SYSTEM',
-          },
-        });
-        await tx.washerOffer.updateMany({
-          where: { bookingId: b.id, status: OfferStatus.PENDING },
-          data: { status: OfferStatus.EXPIRED },
-        });
-      });
+    if (expired.length === 0) {
+      return { expiredCount: 0 };
     }
+
+    const ids = expired.map((b) => b.id);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.booking.updateMany({
+        where: { id: { in: ids } },
+        data: {
+          status: BookingStatus.CANCELLED,
+          cancellationReason: 'Aucun laveur choisi dans le délai imparti',
+          cancelledBy: 'SYSTEM',
+        },
+      });
+      await tx.washerOffer.updateMany({
+        where: { bookingId: { in: ids }, status: OfferStatus.PENDING },
+        data: { status: OfferStatus.EXPIRED },
+      });
+    });
 
     return { expiredCount: expired.length };
   }

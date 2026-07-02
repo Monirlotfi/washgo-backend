@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "299956422264",
-    "project_id": "bookmanager-d65b0",
-    "storage_bucket": "bookmanager-d65b0.firebasestorage.app"
+    "project_number": "204546857159",
+    "project_id": "washgo-1582e",
+    "storage_bucket": "washgo-1582e.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:299956422264:android:3de748f4add8133e398f8d",
+        "mobilesdk_app_id": "1:204546857159:android:d64472f09527bd4b0586e2",
         "android_client_info": {
           "package_name": "com.washgo.mobile"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDbPZw-cn1WD8OzAR6eQzH_hRb6g0szXfM"
+          "current_key": "AIzaSyCuypF2HBthfvUeFJb6dsdEp9XgDlbH7Jc"
         }
       ],
       "services": {

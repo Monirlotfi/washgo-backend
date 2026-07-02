@@ -102,7 +102,7 @@ export class BookingsService {
       },
     });
 
-    this.notifyNearbyWashers(booking.id, dto.lat, dto.lng).catch((err) => {
+    this.notifyNearbyWashers(booking.id, dto.lat, dto.lng).catch((err: any) => {
       console.error('Erreur notif laveurs proches:', err);
     });
 
@@ -235,7 +235,8 @@ export class BookingsService {
     //  ORDER BY distance_meters ASC
     //  LIMIT ${MAX_WASHERS_TO_RETURN}
     //`;
-    // Évite le double calcul de ST_DistanceSphere (SELECT + WHERE)
+    const BBOX_DEG = 0.1;
+
     const washers = await this.prisma.$queryRaw<NearbyWasher[]>`
       WITH nearby AS (
         SELECT
@@ -253,6 +254,8 @@ export class BookingsService {
           AND wp."currentLat" IS NOT NULL
           AND wp."currentLng" IS NOT NULL
           AND wp."isVerified" = true
+          AND wp."currentLat" BETWEEN ${lat - BBOX_DEG} AND ${lat + BBOX_DEG}
+          AND wp."currentLng" BETWEEN ${lng - BBOX_DEG} AND ${lng + BBOX_DEG}
       )
       SELECT * FROM nearby
       WHERE distance_meters <= ${SEARCH_RADIUS_METERS}
@@ -330,7 +333,7 @@ export class BookingsService {
               reason: reasonLabel,
             }),
           )
-          .catch((err) => console.error('Erreur notif:', err));
+          .catch((err: any) => console.error('Erreur notif:', err));
       }
     }
 
@@ -407,7 +410,7 @@ export class BookingsService {
             priceMAD,
           }),
         )
-        .catch((err) => console.error('Erreur notif:', err));
+        .catch((err: any) => console.error('Erreur notif:', err));
     }
 
     return updated;
@@ -481,38 +484,40 @@ export class BookingsService {
     //    ) <= ${SEARCH_RADIUS_METERS}
     //  ORDER BY distance ASC
     //`;
-    const nearbyWashers = await this.prisma.$queryRaw<
-      Array<{ user_id: string; full_name: string; distance: number }>
-    >`
-      WITH nearby AS (
-        SELECT
-          u.id AS user_id,
-          u."fullName" AS full_name,
-          ST_DistanceSphere(
-            ST_MakePoint(${lng}, ${lat}),
-            ST_MakePoint(wp."currentLng", wp."currentLat")
-          ) AS distance
-        FROM "WasherProfile" wp
-        INNER JOIN "User" u ON u.id = wp."userId"
-        WHERE wp.status = 'AVAILABLE'
-          AND wp."currentLat" IS NOT NULL
-          AND wp."currentLng" IS NOT NULL
-          AND wp."isVerified" = true
-      )
-      SELECT * FROM nearby
-      WHERE distance <= ${SEARCH_RADIUS_METERS}
-      ORDER BY distance ASC
-    `;
+    const BBOX_DEG = 0.1;
 
-    if (nearbyWashers.length === 0) return;
+    const [nearbyWashers, booking] = await Promise.all([
+      this.prisma.$queryRaw<
+        Array<{ user_id: string; full_name: string; distance: number }>
+      >`
+        WITH nearby AS (
+          SELECT
+            u.id AS user_id,
+            u."fullName" AS full_name,
+            ST_DistanceSphere(
+              ST_MakePoint(${lng}, ${lat}),
+              ST_MakePoint(wp."currentLng", wp."currentLat")
+            ) AS distance
+          FROM "WasherProfile" wp
+          INNER JOIN "User" u ON u.id = wp."userId"
+          WHERE wp.status = 'AVAILABLE'
+            AND wp."currentLat" IS NOT NULL
+            AND wp."currentLng" IS NOT NULL
+            AND wp."isVerified" = true
+            AND wp."currentLat" BETWEEN ${lat - BBOX_DEG} AND ${lat + BBOX_DEG}
+            AND wp."currentLng" BETWEEN ${lng - BBOX_DEG} AND ${lng + BBOX_DEG}
+        )
+        SELECT * FROM nearby
+        WHERE distance <= ${SEARCH_RADIUS_METERS}
+        ORDER BY distance ASC
+      `,
+      this.prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: { priceMAD: true, washType: true, vehicle: { select: { brand: true, model: true } } },
+      }),
+    ]);
 
-    const booking = await this.prisma.booking.findUnique({
-      where: { id: bookingId },
-      include: {
-        vehicle: { select: { brand: true, model: true } },
-      },
-    });
-    if (!booking) return;
+    if (nearbyWashers.length === 0 || !booking) return;
 
     const washTypeLabel =
       (

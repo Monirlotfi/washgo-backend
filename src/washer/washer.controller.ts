@@ -41,6 +41,11 @@ export class WasherController {
     return this.washerService.updateAvailability(user.id, dto);
   }
 
+  @Get('dashboard')
+  getDashboard(@CurrentUser() user: { id: string }) {
+    return this.washerService.getDashboard(user.id);
+  }
+
   @Get('bookings/available')
   getAvailableBookings(@CurrentUser() user: { id: string }) {
     return this.washerService.getAvailableBookings(user.id);

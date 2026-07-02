@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto';
-import { BookingStatus, CancellationActor, WasherStatus } from '@prisma/client';
+import { BookingStatus, CancellationActor, OfferStatus, WasherStatus } from '@prisma/client';
 import { WasherCancelBookingDto } from './dto/washer-cancel-booking.dto';
 import { WasherCancellationReason } from '@prisma/client';
 import { calculateEtaMinutes, haversineDistanceMeters } from '../bookings/eta';
@@ -186,17 +186,25 @@ export class WasherService {
     //  ORDER BY distance_meters ASC
     //  LIMIT 20
     //`;
+    const lat = profile.currentLat;
+    const lng = profile.currentLng;
+    // Bounding box pre-filter (~11km) to use (lat, lng) index
+    // before expensive ST_DistanceSphere computation
+    const BBOX_DEG = 0.1;
+
     const bookings = await this.prisma.$queryRaw<AvailableBooking[]>`
       WITH nearby_bookings AS (
         SELECT
           b.id,
           ST_DistanceSphere(
             ST_MakePoint(b.lng, b.lat),
-            ST_MakePoint(${profile.currentLng}, ${profile.currentLat})
+            ST_MakePoint(${lng}, ${lat})
           ) AS dist
         FROM "Booking" b
         WHERE b.status = 'PENDING'
           AND (b."expiresAt" IS NULL OR b."expiresAt" > NOW())
+          AND b.lat BETWEEN ${lat - BBOX_DEG} AND ${lat + BBOX_DEG}
+          AND b.lng BETWEEN ${lng - BBOX_DEG} AND ${lng + BBOX_DEG}
       )
       SELECT
         b.id AS booking_id,
@@ -249,7 +257,7 @@ export class WasherService {
     );
 
     // Notif au client
-    this.notifyClient(bookingId, profile.id, 'arrived').catch((err) =>
+    this.notifyClient(bookingId, profile.id, 'arrived').catch((err: any) =>
       console.error('Erreur notif:', err),
     );
 
@@ -266,7 +274,7 @@ export class WasherService {
       { startedAt: new Date() },
     );
 
-    this.notifyClient(bookingId, profile.id, 'started').catch((err) =>
+    this.notifyClient(bookingId, profile.id, 'started').catch((err: any) =>
       console.error('Erreur notif:', err),
     );
 
@@ -305,7 +313,7 @@ export class WasherService {
     });
 
     // Notif au client : "lavage terminé, confirmez svp"
-    this.notifyClient(bookingId, profile.id, 'completed').catch((err) =>
+    this.notifyClient(bookingId, profile.id, 'completed').catch((err: any) =>
       console.error('Erreur notif:', err),
     );
 
@@ -417,7 +425,7 @@ export class WasherService {
           reason: result.reasonLabel,
         }),
       )
-      .catch((err) => console.error('Erreur notif:', err));
+      .catch((err: any) => console.error('Erreur notif:', err));
 
     return result.booking;
   }
@@ -539,26 +547,23 @@ export class WasherService {
     //  },
     //  orderBy: { createdAt: 'desc' },
     //});
-    const [completed, cancelled] = await Promise.all([
-      this.prisma.booking.findMany({
-        where: {
-          washerId: profile.id,
-          status: BookingStatus.COMPLETED,
-          createdAt: { gte: start, lt: end },
-        },
-        select: { id: true, priceMAD: true, addressLabel: true, createdAt: true, completedAt: true, client: { select: { fullName: true } }, vehicle: { select: { brand: true, model: true, plate: true } } },
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.booking.findMany({
-        where: {
-          washerId: profile.id,
-          status: BookingStatus.CANCELLED,
-          createdAt: { gte: start, lt: end },
-        },
-        select: { id: true, priceMAD: true, addressLabel: true, createdAt: true, cancellationReason: true, cancelledBy: true, client: { select: { fullName: true } }, vehicle: { select: { brand: true, model: true, plate: true } } },
-        orderBy: { createdAt: 'desc' },
-      }),
-    ]);
+    const all = await this.prisma.booking.findMany({
+      where: {
+        washerId: profile.id,
+        status: { in: [BookingStatus.COMPLETED, BookingStatus.CANCELLED] },
+        createdAt: { gte: start, lt: end },
+      },
+      select: {
+        id: true, status: true, priceMAD: true, addressLabel: true, createdAt: true,
+        completedAt: true, cancellationReason: true, cancelledBy: true,
+        client: { select: { fullName: true } },
+        vehicle: { select: { brand: true, model: true, plate: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const completed = all.filter((b) => b.status === BookingStatus.COMPLETED);
+    const cancelled = all.filter((b) => b.status === BookingStatus.CANCELLED);
 
     const totalEarnedMAD = completed.reduce((sum, b) => sum + b.priceMAD, 0);
     const lostMAD = cancelled.reduce((sum, b) => sum + b.priceMAD, 0);
@@ -593,17 +598,99 @@ export class WasherService {
       //})),
       bookings: allBookings.map((b) => ({
         id: b.id,
-        status: 'status' in b ? b.status : BookingStatus.COMPLETED,
+        status: b.status,
         priceMAD: b.priceMAD,
         addressLabel: b.addressLabel,
         clientName: b.client.fullName,
         vehicleLabel: `${b.vehicle.brand} ${b.vehicle.model}`,
         vehiclePlate: b.vehicle.plate,
         createdAt: b.createdAt,
-        completedAt: 'completedAt' in b ? b.completedAt : undefined,
-        cancellationReason: 'cancellationReason' in b ? b.cancellationReason : undefined,
-        cancelledBy: 'cancelledBy' in b ? b.cancelledBy : undefined,
+        completedAt: b.completedAt ?? undefined,
+        cancellationReason: b.cancellationReason ?? undefined,
+        cancelledBy: b.cancelledBy ?? undefined,
       })),
+    };
+  }
+
+  /**
+   * Dashboard combiné pour le laveur :
+   * regroupe booking actif, bookings disponibles & offres en attente
+   * en UN SEUL appel au lieu de 3.
+   */
+  async getDashboard(userId: string) {
+    const profile = await this.prisma.washerProfile.findUnique({
+      where: { userId },
+      select: {
+        id: true, isVerified: true, status: true,
+        currentLat: true, currentLng: true, avgRating: true,
+      },
+    });
+    if (!profile) throw new NotFoundException('Profil laveur introuvable');
+
+    const [activeBooking, availableBookings, pendingOffers] = await Promise.all([
+      // 1. Booking actif (ACCEPTED / ARRIVED / IN_PROGRESS)
+      this.prisma.booking.findFirst({
+        where: {
+          washerId: profile.id,
+          status: {
+            in: [
+              BookingStatus.ACCEPTED, BookingStatus.ARRIVED,
+              BookingStatus.IN_PROGRESS, BookingStatus.AWAITING_CLIENT_CONFIRMATION,
+            ],
+          },
+        },
+        select: {
+          id: true, clientId: true, status: true, priceMAD: true,
+          addressLabel: true, lat: true, lng: true, washType: true,
+          scheduledAt: true, acceptedAt: true, arrivedAt: true,
+          startedAt: true, completedAt: true, createdAt: true,
+          estimatedDurationMin: true, notes: true,
+          client: { select: { fullName: true, phone: true } },
+          vehicle: { select: { brand: true, model: true, plate: true, size: true } },
+        },
+      }),
+
+      // 2. Bookings disponibles (si en ligne et pas de booking actif)
+      profile.currentLat && profile.currentLng && profile.status !== WasherStatus.BUSY
+        ? this.getAvailableBookings(userId).catch(() => [])
+        : Promise.resolve([]),
+
+      // 3. Offres en attente
+      this.prisma.washerOffer.findMany({
+        where: {
+          washerId: profile.id,
+          status: OfferStatus.PENDING,
+          booking: { status: BookingStatus.PENDING },
+        },
+        select: {
+          id: true, bookingId: true, washerId: true, proposedPriceMAD: true,
+          estimatedEtaMin: true, status: true, createdAt: true,
+          booking: {
+            select: {
+              id: true, addressLabel: true, lat: true, lng: true,
+              priceMAD: true, washType: true, notes: true,
+              status: true, expiresAt: true,
+              client: { select: { fullName: true } },
+              vehicle: { select: { brand: true, model: true, plate: true, size: true, category: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    return {
+      profile: {
+        id: profile.id,
+        status: profile.status,
+        isVerified: profile.isVerified,
+        currentLat: profile.currentLat,
+        currentLng: profile.currentLng,
+        avgRating: profile.avgRating,
+      },
+      activeBooking: activeBooking ?? null,
+      availableBookings,
+      pendingOffers,
     };
   }
 

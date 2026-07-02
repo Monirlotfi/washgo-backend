@@ -46,7 +46,7 @@ export class RatingsService {
       throw new ConflictException('Cette réservation a déjà été notée');
     }
 
-    // 2. Transaction : créer le rating + recalculer avgRating du laveur
+    // 2. Transaction : créer le rating + mettre à jour avgRating de façon incrémentale
     return this.prisma.$transaction(async (tx) => {
       const rating = await tx.rating.create({
         data: {
@@ -57,21 +57,23 @@ export class RatingsService {
         },
       });
 
-      // Recalcule la moyenne sur tous les ratings du laveur
-      const stats = await tx.rating.aggregate({
-        where: {
-          booking: {
-            washerId: booking.washerId!,
-          },
-        },
-        _avg: { score: true },
-        _count: true,
+      // Mise à jour incrémentale : newAvg = (oldAvg * oldCount + newScore) / (oldCount + 1)
+      // Évite un O(n) aggregate sur tous les ratings à chaque nouvelle note
+      const profile = await tx.washerProfile.findUnique({
+        where: { id: booking.washerId! },
+        select: { avgRating: true, totalBookings: true },
       });
+
+      const oldCount = (profile?.totalBookings ?? 0);
+      const oldAvg = profile?.avgRating ?? 0;
+      const newAvg = oldCount > 0
+        ? Math.round(((oldAvg * oldCount + dto.score) / (oldCount + 1)) * 10) / 10
+        : dto.score;
 
       await tx.washerProfile.update({
         where: { id: booking.washerId! },
         data: {
-          avgRating: stats._avg.score ?? 0,
+          avgRating: newAvg,
         },
       });
 

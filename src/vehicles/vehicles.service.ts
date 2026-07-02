@@ -53,7 +53,12 @@ export class VehiclesService {
   }
 
   async update(userId: string, vehicleId: string, dto: UpdateVehicleDto) {
-    await this.findOneByUser(userId, vehicleId); // vérifie existence + propriété
+    const vehicle = await this.prisma.vehicle.findUnique({
+      where: { id: vehicleId },
+      select: { userId: true },
+    });
+    if (!vehicle) throw new NotFoundException('Véhicule introuvable');
+    if (vehicle.userId !== userId) throw new ForbiddenException('Ce véhicule ne vous appartient pas');
     return this.prisma.vehicle.update({
       where: { id: vehicleId },
       data: dto,
@@ -61,7 +66,12 @@ export class VehiclesService {
   }
 
   async remove(userId: string, vehicleId: string) {
-    await this.findOneByUser(userId, vehicleId);
+    const vehicle = await this.prisma.vehicle.findUnique({
+      where: { id: vehicleId },
+      select: { userId: true },
+    });
+    if (!vehicle) throw new NotFoundException('Véhicule introuvable');
+    if (vehicle.userId !== userId) throw new ForbiddenException('Ce véhicule ne vous appartient pas');
     await this.prisma.vehicle.delete({ where: { id: vehicleId } });
     return { success: true };
   }

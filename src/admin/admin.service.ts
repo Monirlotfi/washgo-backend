@@ -81,7 +81,7 @@ export class AdminService {
       title: '✅ Compte activé !',
       body: `Bienvenue ${washer.user.fullName} ! Votre compte WashGo est maintenant actif. Vous pouvez commencer à accepter des commandes.`,
       data: { type: 'ACCOUNT_APPROVED' },
-    }).catch(console.error);
+    }).catch((err: any) => console.error(err));
 
     return updated;
   }
@@ -118,7 +118,7 @@ export class AdminService {
       title: '❌ Demande refusée',
       body: `Votre demande n'a pas pu être validée. Motif : ${reason}`,
       data: { type: 'ACCOUNT_REJECTED' },
-    }).catch(console.error);
+    }).catch((err: any) => console.error(err));
 
     return updated;
   }
