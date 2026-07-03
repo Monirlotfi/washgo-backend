@@ -118,7 +118,9 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { phone: dto.phone },
       include: {
-        washerProfile: { select: { isVerified: true, verificationStatus: true } },
+        washerProfile: {
+          select: { isVerified: true, verificationStatus: true, retryMessage: true },
+        },
       },
     });
 
@@ -127,19 +129,28 @@ export class AuthService {
     const passwordValid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordValid) throw new UnauthorizedException('Identifiants invalides');
 
-    // Si washer non vérifié → bloque la connexion
     if (user.role === UserRole.WASHER && user.washerProfile) {
-      if (!user.washerProfile.isVerified) {
+      const { isVerified, verificationStatus } = user.washerProfile;
+
+      if (!isVerified && verificationStatus === 'REJECTED') {
         throw new UnauthorizedException(
-          'Votre compte est en attente de validation. Vous recevrez une notification dès qu\'il sera activé.',
+          "Votre demande a été refusée. Contactez le support pour plus d'informations.",
         );
       }
+
+      // PENDING → connexion autorisée, redirigé vers écran d'attente
+      // RETRY → connexion autorisée, redirigé vers écran de correction
     }
 
     return {
       user: {
-        id: user.id, phone: user.phone, email: user.email,
-        fullName: user.fullName, role: user.role,
+        id: user.id,
+        phone: user.phone,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        verificationStatus: user.washerProfile?.verificationStatus ?? null,
+        verificationNote: user.washerProfile?.retryMessage ?? null,
       },
       accessToken: this.signToken(user.id, user.role),
     };

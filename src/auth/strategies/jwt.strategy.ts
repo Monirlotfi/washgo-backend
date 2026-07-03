@@ -32,6 +32,12 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         fullName: true,
         role: true,
         avatarUrl: true,
+        washerProfile: {
+          select: {
+            verificationStatus: true,
+            retryMessage: true,
+          },
+        },
       },
     });
 
@@ -39,6 +45,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException('Utilisateur introuvable');
     }
 
-    return user; // disponible dans req.user sur toutes les routes protégées
+    const { washerProfile, ...rest } = user as any;
+    return {
+      ...rest,
+      verificationStatus: washerProfile?.verificationStatus ?? null,
+      verificationNote: washerProfile?.retryMessage ?? null,
+    };
   }
 }

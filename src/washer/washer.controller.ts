@@ -8,7 +8,10 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { WasherService } from './washer.service';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto';
@@ -104,5 +107,15 @@ export class WasherController {
     @Param('id') id: string,
   ) {
     return this.washerService.completeWash(user.id, id);
+  }
+
+  // PATCH /washer/profile/cin — re-upload photo CIN (statut RETRY/PENDING)
+  @Patch('profile/cin')
+  @UseInterceptors(FileInterceptor('cinPhoto'))
+  updateCinPhoto(
+    @CurrentUser() user: { id: string },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.washerService.updateCinPhoto(user.id, file?.buffer);
   }
 }

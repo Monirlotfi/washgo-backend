@@ -13,6 +13,7 @@ import { WasherCancellationReason } from '@prisma/client';
 import { calculateEtaMinutes, haversineDistanceMeters } from '../bookings/eta';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationMessages } from '../notifications/notification.messages';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 const SEARCH_RADIUS_METERS = 5000;
 
@@ -40,6 +41,7 @@ export class WasherService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly cloudinary: CloudinaryService,
   ) {}
 
   /** Récupère le WasherProfile associé à un userId */
@@ -501,5 +503,19 @@ export class WasherService {
       month: r.month,
       count: Number(r.count),
     }));
+  }
+
+  async updateCinPhoto(userId: string, buffer?: Buffer) {
+    if (!buffer) throw new BadRequestException('Photo CIN requise');
+
+    const profile = await this.getProfileByUserId(userId);
+
+    const cinPhotoUrl = await this.cloudinary.uploadBuffer(buffer, 'washgo/cin');
+
+    return this.prisma.washerProfile.update({
+      where: { id: profile.id },
+      data: { cinPhotoUrl },
+      select: { cinPhotoUrl: true, verificationStatus: true },
+    });
   }
 }

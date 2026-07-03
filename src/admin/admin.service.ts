@@ -124,6 +124,41 @@ export class AdminService {
   }
 
   /**
+   * Demande une correction au washer → statut RETRY + notif push
+   */
+  async retryWasher(washerId: string, adminId: string, message: string) {
+    const washer = await this.prisma.washerProfile.findUnique({
+      where: { id: washerId },
+      include: { user: { select: { id: true, fullName: true } } },
+    });
+
+    if (!washer) throw new NotFoundException('Laveur introuvable');
+    if (washer.verificationStatus === 'REJECTED') {
+      throw new BadRequestException('Ce laveur est déjà rejeté définitivement');
+    }
+
+    const updated = await this.prisma.washerProfile.update({
+      where: { id: washerId },
+      data: {
+        isVerified: false,
+        verificationStatus: 'RETRY',
+        verificationNote: message,
+        retryMessage: message,
+      },
+    });
+
+    this.notifications.enqueue({
+      userId: washer.user.id,
+      type: 'ACCOUNT_RETRY' as any,
+      title: '⚠️ Correction requise',
+      body: message,
+      data: { type: 'ACCOUNT_RETRY', message },
+    }).catch(console.error);
+
+    return updated;
+  }
+
+  /**
    * Liste tous les washers (approuvés, rejetés, en attente)
    */
   async getAllWashers(status?: string) {
