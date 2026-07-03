@@ -5,7 +5,7 @@ generator client {
 datasource db {
   provider          = "postgresql"
   url               = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  directUrl         = env("DIRECT_URL")
 }
 
 enum CancellationActor {
@@ -100,7 +100,8 @@ model WasherProfile {
   // Vérification
   isVerified           Boolean                  @default(false)
   verificationStatus   WasherVerificationStatus @default(PENDING)
-  verificationNote     String?                  // ← note de rejet admin
+  verificationNote     String?  
+  retryMessage         String?                // ← note de rejet admin
   verifiedAt           DateTime?               // ← date d'activation
   verifiedBy           String?                 // ← userId admin qui a validé
 
@@ -235,6 +236,7 @@ enum WasherVerificationStatus {
   PENDING         // En attente de validation admin
   APPROVED        // Approuvé
   REJECTED        // Rejeté
+  RETRY           // Correction requise
 }
 
 enum OtpPurpose {

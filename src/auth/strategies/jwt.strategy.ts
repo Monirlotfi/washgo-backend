@@ -27,11 +27,31 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException('Token invalide');
     }
 
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        phone: true,
+        fullName: true,
+        role: true,
+        washerProfile: {
+          select: {
+            verificationStatus: true,
+            retryMessage: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Utilisateur introuvable');
+    }
+
+    const { washerProfile, ...rest } = user as any;
     return {
-      id: payload.sub,
-      role: payload.role,
-      phone: payload.phone ?? null,
-      fullName: payload.fullName ?? null,
+      ...rest,
+      verificationStatus: washerProfile?.verificationStatus ?? null,
+      verificationNote: washerProfile?.retryMessage ?? null,
     };
   }
 }

@@ -13,6 +13,12 @@ class RejectDto {
   reason: string;
 }
 
+class RetryDto {
+  @IsString()
+  @IsNotEmpty()
+  message: string;
+}
+
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
 export class AdminController {
@@ -53,5 +59,15 @@ export class AdminController {
     @CurrentUser() user: any,
   ) {
     return this.adminService.rejectWasher(id, user.id, dto.reason);
+  }
+
+  // POST /api/v1/admin/washers/:id/retry
+  @Post('washers/:id/retry')
+  retryWasher(
+    @Param('id') id: string,
+    @Body() dto: RetryDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.adminService.retryWasher(id, user.id, dto.message);
   }
 }
