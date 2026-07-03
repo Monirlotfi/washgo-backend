@@ -17,5 +17,5 @@ export interface NotificationPayload {
   userId: string;
   title: string;
   body: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
 }

@@ -29,34 +29,43 @@ export class NotificationsService implements OnModuleInit {
 
   /**
    * Met une notification en queue (point d'entrée principal).
-   * Appel non-bloquant.
+   * Fire-and-forget — aucun roundtrip Redis ne bloque l'API.
    */
-  async enqueue(payload: NotificationPayload) {
-    await this.queue.add('send', payload, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 1000 },
-      removeOnComplete: 100,
-      removeOnFail: 500,
-    });
+  enqueue(payload: NotificationPayload) {
+    return this.queue
+      .add('send', payload, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 },
+        removeOnComplete: 100,
+        removeOnFail: 500,
+      })
+      .catch((err: any) =>
+        this.logger.warn(`Notification non envoyée (Redis indisponible) : ${err.message}`),
+      );
   }
 
   /**
    * Met N notifications en queue d'un coup (broadcast).
+   * Fire-and-forget — aucun roundtrip Redis ne bloque l'API.
    */
-  async enqueueMany(payloads: NotificationPayload[]) {
-    if (payloads.length === 0) return;
-    await this.queue.addBulk(
-      payloads.map((p) => ({
-        name: 'send',
-        data: p,
-        opts: {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 1000 },
-          removeOnComplete: 100,
-          removeOnFail: 500,
-        },
-      })),
-    );
+  enqueueMany(payloads: NotificationPayload[]) {
+    if (payloads.length === 0) return Promise.resolve();
+    return this.queue
+      .addBulk(
+        payloads.map((p) => ({
+          name: 'send',
+          data: p,
+          opts: {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 1000 },
+            removeOnComplete: 100,
+            removeOnFail: 500,
+          },
+        })),
+      )
+      .catch((err: any) =>
+        this.logger.warn(`Notifications non envoyées (Redis indisponible) : ${err.message}`),
+      );
   }
 
   /**

@@ -5,7 +5,7 @@ generator client {
 datasource db {
   provider          = "postgresql"
   url               = env("DATABASE_URL")
-  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum CancellationActor {
@@ -80,6 +80,7 @@ model User {
   ratingsGiven   Rating[]       @relation("RatingAuthor")
 
   @@index([role])
+  @@index([createdAt])
 }
 
 model WasherProfile {
@@ -113,6 +114,8 @@ model WasherProfile {
 
   @@index([status])
   @@index([verificationStatus])
+  @@index([currentLat, currentLng])
+  @@index([isVerified])
 }
 
 model Vehicle {
@@ -127,6 +130,8 @@ model Vehicle {
   createdAt DateTime    @default(now())
 
   bookings Booking[]
+
+  @@index([userId])
 }
 
 model Booking {
@@ -169,6 +174,9 @@ model Booking {
   @@index([status, scheduledAt])
   @@index([washerId, status])
   @@index([clientId])
+  @@index([clientId, status])
+  @@index([lat, lng])
+  @@index([createdAt])
   offers      WasherOffer[]
   expiresAt   DateTime?    @db.Timestamptz(3)
 }
@@ -197,6 +205,7 @@ model WasherOffer {
   @@unique([bookingId, washerId]) // un laveur fait UNE seule offre par booking
   @@index([bookingId, status])
   @@index([washerId, status])
+  @@index([createdAt])
 }
 model OtpCode {
   id        String     @id @default(cuid())

@@ -1,17 +1,16 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import compression from 'compression';
+import { PrismaService } from './prisma/prisma.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {});
 
-  // 1. Fully allows incoming connections from mobile platforms
-  app.enableCors({
-    origin: true,
-    credentials: true,
-  });
+  app.enableCors({ origin: true, credentials: true });
 
-  // 2. Strict type parsing and DTO filtering
+  app.use(compression());
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -23,12 +22,18 @@ async function bootstrap() {
   app.setGlobalPrefix('api/v1');
 
   const port = process.env.PORT ?? 3000;
-  
-  // 3. FIXED: Listen on '0.0.0.0' to broadcast the API over your local network interfaces.
-  // This allows real physical test devices on your Wi-Fi to hit your server.
   await app.listen(port, '0.0.0.0');
-  
+
+  // Keep Neon DB alive — prevents cold starts on serverless Postgres
+  const prisma = app.get(PrismaService);
+  setInterval(async () => {
+    try {
+      await prisma.$executeRaw`SELECT 1`;
+    } catch (err: any) {
+      console.warn('[KeepAlive] DB ping failed:', err.message);
+    }
+  }, 30_000);
+
   console.log(`🚀 WashGo API running on http://localhost:${port}/api/v1`);
-  console.log(`🌐 Accessible on local network at http://192.168.1.11:${port}/api/v1`);
 }
 bootstrap();
