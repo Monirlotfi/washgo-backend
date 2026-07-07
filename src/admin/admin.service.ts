@@ -7,6 +7,7 @@ import { WasherStatus } from '@prisma/client';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { CreateCarouselDto } from '../carousel/dto/create-carousel.dto';
 import { UpdateCarouselDto } from '../carousel/dto/update-carousel.dto';
+import { CarouselGateway } from '../carousel/carousel.gateway';
 
 @Injectable()
 export class AdminService {
@@ -14,6 +15,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly cloudinary: CloudinaryService,
+    private readonly carouselGateway: CarouselGateway,
   ) {}
 
   async getPendingWashers() {
@@ -167,9 +169,11 @@ export class AdminService {
 
   async createCarouselSlide(dto: CreateCarouselDto, imageBuffer: Buffer) {
     const imageUrl = await this.cloudinary.uploadBuffer(imageBuffer, 'washgo/carousel');
-    return this.prisma.carouselSlide.create({
+    const slide = await this.prisma.carouselSlide.create({
       data: { ...dto, imageUrl },
     });
+    this.carouselGateway.emitCarouselUpdate();
+    return slide;
   }
 
   async updateCarouselSlide(id: string, dto: UpdateCarouselDto, imageBuffer?: Buffer) {
@@ -181,16 +185,20 @@ export class AdminService {
       imageUrl = await this.cloudinary.uploadBuffer(imageBuffer, 'washgo/carousel');
     }
 
-    return this.prisma.carouselSlide.update({
+    const slide = await this.prisma.carouselSlide.update({
       where: { id },
       data: imageUrl ? { ...dto, imageUrl } : dto,
     });
+    this.carouselGateway.emitCarouselUpdate();
+    return slide;
   }
 
   async deleteCarouselSlide(id: string) {
     const existing = await this.prisma.carouselSlide.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Slide introuvable');
 
-    return this.prisma.carouselSlide.delete({ where: { id } });
+    const slide = await this.prisma.carouselSlide.delete({ where: { id } });
+    this.carouselGateway.emitCarouselUpdate();
+    return slide;
   }
 }

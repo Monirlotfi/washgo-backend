@@ -82,6 +82,8 @@ export class AdminController {
     const parsed: any = {};
     if (dto.title) parsed.title = dto.title;
     if (dto.subtitle) parsed.subtitle = dto.subtitle;
+    if (dto.textPosition) parsed.textPosition = dto.textPosition;
+    if (dto.imageFit) parsed.imageFit = dto.imageFit;
     if (dto.order !== undefined) parsed.order = parseInt(dto.order, 10);
     if (dto.active !== undefined) parsed.active = dto.active === 'true';
     return this.adminService.createCarouselSlide(parsed, file.buffer);
@@ -97,6 +99,8 @@ export class AdminController {
     const parsed: any = {};
     if (dto.title !== undefined) parsed.title = dto.title;
     if (dto.subtitle !== undefined) parsed.subtitle = dto.subtitle;
+    if (dto.textPosition !== undefined) parsed.textPosition = dto.textPosition;
+    if (dto.imageFit !== undefined) parsed.imageFit = dto.imageFit;
     if (dto.order !== undefined) parsed.order = parseInt(dto.order, 10);
     if (dto.active !== undefined) parsed.active = dto.active === 'true';
     return this.adminService.updateCarouselSlide(id, parsed, file?.buffer);

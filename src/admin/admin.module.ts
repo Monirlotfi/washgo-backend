@@ -2,11 +2,11 @@ import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { CarouselService } from '../carousel/carousel.service';
+import { CarouselModule } from '../carousel/carousel.module';
 
 @Module({
-  imports: [NotificationsModule],
+  imports: [NotificationsModule, CarouselModule],
   controllers: [AdminController],
-  providers: [AdminService, CarouselService],
+  providers: [AdminService],
 })
 export class AdminModule {}

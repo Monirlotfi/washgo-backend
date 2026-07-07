@@ -2,10 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCarouselDto } from './dto/create-carousel.dto';
 import { UpdateCarouselDto } from './dto/update-carousel.dto';
+import { CarouselGateway } from './carousel.gateway';
 
 @Injectable()
 export class CarouselService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly carouselGateway: CarouselGateway,
+  ) {}
 
   async getActiveSlides() {
     return this.prisma.carouselSlide.findMany({
@@ -21,25 +25,31 @@ export class CarouselService {
   }
 
   async createSlide(dto: CreateCarouselDto, imageUrl: string) {
-    return this.prisma.carouselSlide.create({
+    const slide = await this.prisma.carouselSlide.create({
       data: { ...dto, imageUrl },
     });
+    this.carouselGateway.emitCarouselUpdate();
+    return slide;
   }
 
   async updateSlide(id: string, dto: UpdateCarouselDto, imageUrl?: string) {
     const existing = await this.prisma.carouselSlide.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Slide introuvable');
 
-    return this.prisma.carouselSlide.update({
+    const slide = await this.prisma.carouselSlide.update({
       where: { id },
       data: imageUrl ? { ...dto, imageUrl } : dto,
     });
+    this.carouselGateway.emitCarouselUpdate();
+    return slide;
   }
 
   async deleteSlide(id: string) {
     const existing = await this.prisma.carouselSlide.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Slide introuvable');
 
-    return this.prisma.carouselSlide.delete({ where: { id } });
+    const slide = await this.prisma.carouselSlide.delete({ where: { id } });
+    this.carouselGateway.emitCarouselUpdate();
+    return slide;
   }
 }

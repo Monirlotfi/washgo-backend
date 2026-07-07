@@ -209,14 +209,16 @@ model WasherOffer {
   @@index([createdAt])
 }
 model CarouselSlide {
-  id        String   @id @default(cuid())
-  imageUrl  String
-  title     String
-  subtitle  String?
-  order     Int      @default(0)
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  imageUrl     String
+  title        String
+  subtitle     String?
+  textPosition String   @default("BOTTOM")
+  imageFit     String   @default("COVER")
+  order        Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([active, order])
 }
