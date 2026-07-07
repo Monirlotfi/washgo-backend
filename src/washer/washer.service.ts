@@ -739,7 +739,6 @@ export class WasherService {
       count: Number(r.count),
     }));
   }
-  }
 
   async updateCinPhoto(userId: string, buffer?: Buffer) {
     if (!buffer) throw new BadRequestException('Photo CIN requise');

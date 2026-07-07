@@ -13,6 +13,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { FirebaseModule } from './firebase/firebase.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { AdminModule } from './admin/admin.module';
+import { CarouselModule } from './carousel/carousel.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { AdminModule } from './admin/admin.module';
     FirebaseModule,
     CloudinaryModule,
     AdminModule,
+    CarouselModule,
   ],
 })
 export class AppModule {}

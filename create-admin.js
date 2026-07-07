@@ -1,1 +1,33 @@
-const bcrypt = require('bcrypt'); const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); async function main() { const hash = await bcrypt.hash('admin123', 10); await prisma.user.deleteMany({ where: { phone: '+212600000001' } }); const user = await prisma.user.create({ data: { fullName: 'Admin', phone: '+212600000001', passwordHash: hash, role: 'ADMIN' } }); console.log('Admin created successfully:', user.phone); } main().then(() => prisma.$disconnect()).catch(console.error);
+const bcrypt = require('bcrypt');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+async function main() {
+  const hash = await bcrypt.hash('admin123', 10);
+  const phone = '+212612345678';
+
+  // Use upsert to modify or create without breaking foreign key relations
+  const user = await prisma.user.upsert({
+    where: { phone: phone },
+    update: {
+      fullName: 'Admin',
+      passwordHash: hash,
+      role: 'ADMIN',
+    },
+    create: {
+      fullName: 'Admin',
+      phone: phone,
+      passwordHash: hash,
+      role: 'ADMIN',
+    },
+  });
+
+  console.log('Admin processed successfully:', user.phone, `(Role: ${user.role})`);
+}
+
+main()
+  .then(() => prisma.$disconnect())
+  .catch(async (e) => {
+    console.error(e);
+    await prisma.$disconnect();
+  });

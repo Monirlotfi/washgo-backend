@@ -208,6 +208,19 @@ model WasherOffer {
   @@index([washerId, status])
   @@index([createdAt])
 }
+model CarouselSlide {
+  id        String   @id @default(cuid())
+  imageUrl  String
+  title     String
+  subtitle  String?
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, order])
+}
+
 model OtpCode {
   id        String     @id @default(cuid())
   phone     String
