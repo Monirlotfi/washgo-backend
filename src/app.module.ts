@@ -21,6 +21,15 @@ import { AdminModule } from './admin/admin.module';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => {
+        const redisUrl = config.get<string>('REDIS_URL');
+        if (redisUrl) {
+          return {
+            connection: {
+              url: redisUrl,
+              maxRetriesPerRequest: null,
+            },
+          };
+        }
         const useTls = config.get<string>('REDIS_TLS') === 'true';
         return {
           connection: {
