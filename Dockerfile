@@ -7,4 +7,4 @@ RUN npx prisma generate
 RUN npm run build
 EXPOSE 7860
 ENV PORT=7860
-CMD ["node", "dist/main"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/main"]
