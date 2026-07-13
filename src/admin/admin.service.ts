@@ -21,7 +21,9 @@ export class AdminService {
   async getPendingWashers() {
     return this.prisma.washerProfile.findMany({
       where: { verificationStatus: 'PENDING' },
-      include: {
+      select: {
+        id: true, createdAt: true, isVerified: true, verificationStatus: true,
+        cinPhotoUrl: true, equipmentType: true, licensePlate: true,
         user: {
           select: {
             id: true, fullName: true, phone: true, createdAt: true,
@@ -29,6 +31,7 @@ export class AdminService {
         },
       },
       orderBy: { createdAt: 'asc' },
+      take: 100,
     });
   }
 
@@ -150,7 +153,10 @@ export class AdminService {
   async getAllWashers(status?: string) {
     return this.prisma.washerProfile.findMany({
       where: status ? { verificationStatus: status as any } : undefined,
-      include: {
+      select: {
+        id: true, createdAt: true, isVerified: true, verificationStatus: true,
+        status: true, avgRating: true, totalBookings: true,
+        cinPhotoUrl: true, equipmentType: true, licensePlate: true,
         user: {
           select: {
             id: true, fullName: true, phone: true, createdAt: true,
@@ -158,6 +164,7 @@ export class AdminService {
         },
       },
       orderBy: { createdAt: 'desc' },
+      take: 100,
     });
   }
 

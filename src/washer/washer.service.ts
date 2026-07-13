@@ -48,6 +48,10 @@ export class WasherService {
   private async getProfileByUserId(userId: string) {
     const profile = await this.prisma.washerProfile.findUnique({
       where: { userId },
+      select: {
+        id: true, isVerified: true, status: true,
+        currentLat: true, currentLng: true, userId: true,
+      },
     });
     if (!profile) {
       throw new NotFoundException('Profil laveur introuvable');

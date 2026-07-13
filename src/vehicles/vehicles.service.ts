@@ -36,6 +36,7 @@ export class VehiclesService {
     return this.prisma.vehicle.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
+      take: 50,
     });
   }
 

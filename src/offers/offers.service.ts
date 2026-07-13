@@ -387,6 +387,7 @@ export class OffersService {
         },
       },
       orderBy: { createdAt: 'desc' },
+      take: 50,
     });
   }
 

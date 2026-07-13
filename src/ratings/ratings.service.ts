@@ -25,7 +25,10 @@ export class RatingsService {
     // 1. Charger le booking et vérifier les conditions
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { rating: true },
+      select: {
+        id: true, clientId: true, status: true, washerId: true,
+        rating: { select: { id: true } },
+      },
     });
 
     if (!booking) {
@@ -85,7 +88,10 @@ export class RatingsService {
   async getByBooking(clientId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { rating: true },
+      select: {
+        id: true, clientId: true,
+        rating: { select: { id: true, score: true, comment: true, createdAt: true, authorId: true } },
+      },
     });
     if (!booking) throw new NotFoundException('Réservation introuvable');
     if (booking.clientId !== clientId) {
