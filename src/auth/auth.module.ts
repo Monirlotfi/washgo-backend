@@ -4,10 +4,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { InfobipModule } from '../infobip/infobip.module';
 
 @Module({
   imports: [
     ConfigModule,
+    InfobipModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

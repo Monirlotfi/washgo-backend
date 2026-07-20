@@ -11,7 +11,7 @@ import { RegisterClientDto } from './dto/register-client.dto';
 import { RegisterWasherDto } from './dto/register-washer.dto';
 import { LoginDto } from './dto/login.dto';
 import { UserRole } from '@prisma/client';
-import { FirebaseService } from '../firebase/firebase.service';
+import { InfobipService } from '../infobip/infobip.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -20,22 +20,13 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
-    private readonly firebase: FirebaseService,
+    private readonly infobip: InfobipService,
     private readonly cloudinary: CloudinaryService,
   ) {}
 
   async registerClient(dto: RegisterClientDto) {
-    // 1. Vérifie le token Firebase — s'assure que le téléphone est bien vérifié
-    const verifiedPhone = await this.firebase.verifyPhoneToken(dto.firebaseIdToken);
-
-    // 2. Le numéro Firebase doit correspondre au numéro saisi
-    const normalizedInput = dto.phone.replace(/\s/g, '');
-    const normalizedFirebase = verifiedPhone.replace(/\s/g, '');
-    if (normalizedInput !== normalizedFirebase) {
-      throw new UnauthorizedException(
-        'Le numéro de téléphone ne correspond pas au token Firebase',
-      );
-    }
+    // 1. Vérifie que ce téléphone a un OTP validé récemment, puis le consomme
+    await this.infobip.consumeVerifiedOtp(dto.phone);
 
     await this.ensurePhoneIsFree(dto.phone);
     if (dto.email) await this.ensureEmailIsFree(dto.email);
@@ -62,16 +53,8 @@ export class AuthService {
   }
 
   async registerWasher(dto: RegisterWasherDto, cinPhotoBuffer?: Buffer) {
-    // 1. Vérifie le token Firebase
-    const verifiedPhone = await this.firebase.verifyPhoneToken(dto.firebaseIdToken);
-
-    const normalizedInput = dto.phone.replace(/\s/g, '');
-    const normalizedFirebase = verifiedPhone.replace(/\s/g, '');
-    if (normalizedInput !== normalizedFirebase) {
-      throw new UnauthorizedException(
-        'Le numéro de téléphone ne correspond pas au token Firebase',
-      );
-    }
+    // 1. Vérifie que ce téléphone a un OTP validé récemment, puis le consomme
+    await this.infobip.consumeVerifiedOtp(dto.phone);
 
     await this.ensurePhoneIsFree(dto.phone);
 
@@ -112,6 +95,17 @@ export class AuthService {
 
     // Pas de token — le washer doit attendre la validation admin
     return { message: 'Demande envoyée. Votre compte sera activé sous 24h.' };
+  }
+
+  async sendOtp(phone: string) {
+    await this.ensurePhoneIsFree(phone); // évite d'envoyer un SMS pour un numéro déjà inscrit
+    await this.infobip.sendOtp(phone);
+    return { message: 'Code envoyé' };
+  }
+
+  async verifyOtp(phone: string, code: string) {
+    await this.infobip.verifyOtp(phone, code);
+    return { message: 'Code vérifié' };
   }
 
   async login(dto: LoginDto) {

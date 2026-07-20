@@ -12,6 +12,7 @@ import { OffersModule } from './offers/offers.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { FirebaseModule } from './firebase/firebase.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { InfobipModule } from './infobip/infobip.module';
 import { AdminModule } from './admin/admin.module';
 
 @Module({
@@ -55,6 +56,7 @@ import { AdminModule } from './admin/admin.module';
     NotificationsModule,
     FirebaseModule,
     CloudinaryModule,
+    InfobipModule,
     AdminModule,
   ],
 })

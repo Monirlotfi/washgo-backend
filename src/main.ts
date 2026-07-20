@@ -29,6 +29,5 @@ async function bootstrap() {
   await app.listen(port, '0.0.0.0');
   
   console.log(`🚀 WashGo API running on http://localhost:${port}/api/v1`);
-  console.log(`🌐 Accessible on local network at http://192.168.1.11:${port}/api/v1`);
 }
 bootstrap();

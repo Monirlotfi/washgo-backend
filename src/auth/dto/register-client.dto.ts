@@ -1,6 +1,7 @@
 import {
   IsEmail, IsNotEmpty, IsOptional, IsString, Matches, MinLength,
 } from 'class-validator';
+import { MOROCCO_PHONE_MESSAGE, MOROCCO_PHONE_REGEX } from '../../common/phone.constants';
 
 export class RegisterClientDto {
   @IsString()
@@ -10,9 +11,7 @@ export class RegisterClientDto {
 
   @IsString()
   @IsNotEmpty()
-  @Matches(/^(\+212|0)[5-7][0-9]{8}$/, {
-    message: 'Numéro marocain valide requis (ex: +212612345678)',
-  })
+  @Matches(MOROCCO_PHONE_REGEX, { message: MOROCCO_PHONE_MESSAGE })
   phone!: string;
 
   @IsOptional()
@@ -22,8 +21,4 @@ export class RegisterClientDto {
   @IsString()
   @MinLength(8, { message: 'Mot de passe minimum 8 caractères' })
   password!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  firebaseIdToken!: string;
 }

@@ -2,6 +2,7 @@ import {
   IsEnum, IsNotEmpty, IsOptional, IsString, Matches, MinLength,
 } from 'class-validator';
 import { EquipmentType } from '@prisma/client';
+import { MOROCCO_PHONE_MESSAGE, MOROCCO_PHONE_REGEX } from '../../common/phone.constants';
 
 export class RegisterWasherDto {
   @IsString()
@@ -11,9 +12,7 @@ export class RegisterWasherDto {
 
   @IsString()
   @IsNotEmpty()
-  @Matches(/^(\+212|0)[5-7][0-9]{8}$/, {
-    message: 'Numéro marocain valide requis (ex: +212612345678)',
-  })
+  @Matches(MOROCCO_PHONE_REGEX, { message: MOROCCO_PHONE_MESSAGE })
   phone!: string;
 
   @IsString()
@@ -26,8 +25,4 @@ export class RegisterWasherDto {
   @IsOptional()
   @IsString()
   licensePlate?: string;
-
-  @IsString()
-  @IsNotEmpty()
-  firebaseIdToken!: string;
 }
