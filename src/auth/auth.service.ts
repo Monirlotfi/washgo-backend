@@ -89,12 +89,22 @@ export class AuthService {
       },
       select: {
         id: true, phone: true, fullName: true, role: true,
-        washerProfile: { select: { id: true, isVerified: true, verificationStatus: true } },
+        washerProfile: { select: { id: true, isVerified: true, verificationStatus: true, retryMessage: true } },
       },
     });
 
-    // Pas de token — le washer doit attendre la validation admin
-    return { message: 'Demande envoyée. Votre compte sera activé sous 24h.' };
+    return {
+      user: {
+        id: user.id,
+        phone: user.phone,
+        email: null,
+        fullName: user.fullName,
+        role: user.role,
+        verificationStatus: user.washerProfile?.verificationStatus ?? null,
+        verificationNote: user.washerProfile?.retryMessage ?? null,
+      },
+      accessToken: this.signToken(user.id, user.role),
+    };
   }
 
   async sendOtp(phone: string) {

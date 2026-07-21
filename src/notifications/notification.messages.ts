@@ -116,4 +116,14 @@ export const NotificationMessages = {
       data: { bookingId: input.bookingId },
     };
   },
+
+  bookingExpired(input: MsgInput): NotificationPayload {
+    return {
+      type: 'BOOKING_EXPIRED',
+      userId: input.userId,
+      title: '⏱️ Réservation expirée',
+      body: "Aucun laveur n'a été choisi à temps. Votre réservation a été annulée.",
+      data: { bookingId: input.bookingId },
+    };
+  },
 };

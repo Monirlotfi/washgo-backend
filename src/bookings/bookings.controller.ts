@@ -37,6 +37,12 @@ export class BookingsController {
   }
 
   // Routes spécifiques (préfixes statiques) AVANT les routes paramétrées
+  @Get('active')
+  @Roles(UserRole.CLIENT)
+  findActive(@CurrentUser() user: { id: string }) {
+    return this.bookingsService.findActiveForClient(user.id);
+  }
+
   @Get('history')
   @Roles(UserRole.CLIENT)
   history(@CurrentUser() user: { id: string }) {

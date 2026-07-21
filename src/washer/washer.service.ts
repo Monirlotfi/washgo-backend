@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -38,6 +39,8 @@ export interface AvailableBooking {
 
 @Injectable()
 export class WasherService {
+  private readonly logger = new Logger(WasherService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
@@ -192,7 +195,7 @@ export class WasherService {
 
     // Notif au client
     this.notifyClient(bookingId, profile.id, 'arrived').catch((err) =>
-      console.error('Erreur notif:', err),
+      this.logger.error(`Échec de la notif WASHER_ARRIVED pour booking ${bookingId}`, err),
     );
 
     return updated;
@@ -209,7 +212,7 @@ export class WasherService {
     );
 
     this.notifyClient(bookingId, profile.id, 'started').catch((err) =>
-      console.error('Erreur notif:', err),
+      this.logger.error(`Échec de la notif WASH_STARTED pour booking ${bookingId}`, err),
     );
 
     return updated;
@@ -244,7 +247,7 @@ export class WasherService {
 
     // Notif au client : "lavage terminé, confirmez svp"
     this.notifyClient(bookingId, profile.id, 'completed').catch((err) =>
-      console.error('Erreur notif:', err),
+      this.logger.error(`Échec de la notif WASH_COMPLETED_BY_WASHER pour booking ${bookingId}`, err),
     );
 
     return updated;
@@ -332,7 +335,7 @@ export class WasherService {
           reason: result.reasonLabel,
         }),
       )
-      .catch((err) => console.error('Erreur notif:', err));
+      .catch((err) => this.logger.error(`Échec de la notif BOOKING_CANCELLED_BY_WASHER pour booking ${bookingId}`, err));
 
     return result.booking;
   }

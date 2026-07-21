@@ -133,11 +133,11 @@ model Vehicle {
 model Booking {
   id           String         @id @default(cuid())
   clientId     String
-  client       User           @relation("ClientBookings", fields: [clientId], references: [id])
+  client       User           @relation("ClientBookings", fields: [clientId], references: [id], onDelete: Cascade)
   washerId     String?
   washer       WasherProfile? @relation("WasherBookings", fields: [washerId], references: [id])
   vehicleId    String
-  vehicle      Vehicle        @relation(fields: [vehicleId], references: [id])
+  vehicle      Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
   addressLabel String
   lat          Float
@@ -170,6 +170,7 @@ model Booking {
   @@index([status, scheduledAt])
   @@index([washerId, status])
   @@index([clientId])
+  @@index([clientId, status])
   offers      WasherOffer[]
   expiresAt   DateTime?    @db.Timestamptz(3)
 }
@@ -179,7 +180,7 @@ model Rating {
   bookingId String   @unique
   booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   authorId  String
-  author    User     @relation("RatingAuthor", fields: [authorId], references: [id])
+  author    User     @relation("RatingAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   score     Int
   comment   String?
   createdAt DateTime @default(now())
@@ -199,18 +200,6 @@ model WasherOffer {
   @@index([bookingId, status])
   @@index([washerId, status])
 }
-model OtpCode {
-  id        String     @id @default(cuid())
-  phone     String
-  code      String
-  purpose   OtpPurpose
-  expiresAt DateTime
-  verified  Boolean    @default(false)
-  createdAt DateTime   @default(now())
-
-  @@index([phone, purpose])
-}
-
 model CarouselSlide {
   id           String   @id @default(cuid())
   imageUrl     String
@@ -224,6 +213,18 @@ model CarouselSlide {
   updatedAt    DateTime @updatedAt
 
   @@index([active, order])
+}
+
+model OtpCode {
+  id        String     @id @default(cuid())
+  phone     String
+  code      String
+  purpose   OtpPurpose
+  expiresAt DateTime
+  verified  Boolean    @default(false)
+  createdAt DateTime   @default(now())
+
+  @@index([phone, purpose])
 }
 
 enum OfferStatus {

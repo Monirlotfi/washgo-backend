@@ -10,7 +10,10 @@ export type NotificationType =
   | 'BOOKING_CANCELLED_BY_CLIENT'
   | 'BOOKING_CANCELLED_BY_WASHER'
   | 'BOOKING_REOPENED'
-  | 'BOOKING_EXPIRED';
+  | 'BOOKING_EXPIRED'
+  | 'ACCOUNT_APPROVED'
+  | 'ACCOUNT_REJECTED'
+  | 'ACCOUNT_RETRY';
 
 export interface NotificationPayload {
   type: NotificationType;

@@ -1,15 +1,23 @@
 import {
-  Injectable, NotFoundException, BadRequestException,
+  Injectable, Logger, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { CarouselGateway } from '../carousel/carousel.gateway';
+import { CreateCarouselDto } from '../carousel/dto/create-carousel.dto';
+import { UpdateCarouselDto } from '../carousel/dto/update-carousel.dto';
 import { WasherStatus } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly cloudinary: CloudinaryService,
+    private readonly carouselGateway: CarouselGateway,
   ) {}
 
   /**
@@ -75,13 +83,17 @@ export class AdminService {
     });
 
     // Notif push au washer
-    this.notifications.enqueue({
-      userId: washer.user.id,
-      type: 'ACCOUNT_APPROVED' as any,
-      title: '✅ Compte activé !',
-      body: `Bienvenue ${washer.user.fullName} ! Votre compte WashGo est maintenant actif. Vous pouvez commencer à accepter des commandes.`,
-      data: { type: 'ACCOUNT_APPROVED' },
-    }).catch(console.error);
+    try {
+      await this.notifications.enqueue({
+        userId: washer.user.id,
+        type: 'ACCOUNT_APPROVED',
+        title: '✅ Compte activé !',
+        body: `Bienvenue ${washer.user.fullName} ! Votre compte WashGo est maintenant actif. Vous pouvez commencer à accepter des commandes.`,
+        data: { type: 'ACCOUNT_APPROVED' },
+      });
+    } catch (err) {
+      this.logger.error(`Échec de l'envoi de la notif ACCOUNT_APPROVED à ${washer.user.id}`, err as Error);
+    }
 
     return updated;
   }
@@ -112,13 +124,17 @@ export class AdminService {
     });
 
     // Notif push au washer
-    this.notifications.enqueue({
-      userId: washer.user.id,
-      type: 'ACCOUNT_REJECTED' as any,
-      title: '❌ Demande refusée',
-      body: `Votre demande n'a pas pu être validée. Motif : ${reason}`,
-      data: { type: 'ACCOUNT_REJECTED' },
-    }).catch(console.error);
+    try {
+      await this.notifications.enqueue({
+        userId: washer.user.id,
+        type: 'ACCOUNT_REJECTED',
+        title: '❌ Demande refusée',
+        body: `Votre demande n'a pas pu être validée. Motif : ${reason}`,
+        data: { type: 'ACCOUNT_REJECTED' },
+      });
+    } catch (err) {
+      this.logger.error(`Échec de l'envoi de la notif ACCOUNT_REJECTED à ${washer.user.id}`, err as Error);
+    }
 
     return updated;
   }
@@ -147,13 +163,17 @@ export class AdminService {
       },
     });
 
-    this.notifications.enqueue({
-      userId: washer.user.id,
-      type: 'ACCOUNT_RETRY' as any,
-      title: '⚠️ Correction requise',
-      body: message,
-      data: { type: 'ACCOUNT_RETRY', message },
-    }).catch(console.error);
+    try {
+      await this.notifications.enqueue({
+        userId: washer.user.id,
+        type: 'ACCOUNT_RETRY',
+        title: '⚠️ Correction requise',
+        body: message,
+        data: { type: 'ACCOUNT_RETRY', message },
+      });
+    } catch (err) {
+      this.logger.error(`Échec de l'envoi de la notif ACCOUNT_RETRY à ${washer.user.id}`, err as Error);
+    }
 
     return updated;
   }
@@ -173,5 +193,46 @@ export class AdminService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async getAllCarouselSlides() {
+    return this.prisma.carouselSlide.findMany({
+      orderBy: { order: 'asc' },
+    });
+  }
+
+  async createCarouselSlide(dto: CreateCarouselDto, imageBuffer: Buffer) {
+    const imageUrl = await this.cloudinary.uploadBuffer(imageBuffer, 'washgo/carousel');
+    const slide = await this.prisma.carouselSlide.create({
+      data: { ...dto, imageUrl },
+    });
+    this.carouselGateway.emitCarouselUpdate();
+    return slide;
+  }
+
+  async updateCarouselSlide(id: string, dto: UpdateCarouselDto, imageBuffer?: Buffer) {
+    const existing = await this.prisma.carouselSlide.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Slide introuvable');
+
+    let imageUrl: string | undefined;
+    if (imageBuffer) {
+      imageUrl = await this.cloudinary.uploadBuffer(imageBuffer, 'washgo/carousel');
+    }
+
+    const slide = await this.prisma.carouselSlide.update({
+      where: { id },
+      data: imageUrl ? { ...dto, imageUrl } : dto,
+    });
+    this.carouselGateway.emitCarouselUpdate();
+    return slide;
+  }
+
+  async deleteCarouselSlide(id: string) {
+    const existing = await this.prisma.carouselSlide.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Slide introuvable');
+
+    const slide = await this.prisma.carouselSlide.delete({ where: { id } });
+    this.carouselGateway.emitCarouselUpdate();
+    return slide;
   }
 }

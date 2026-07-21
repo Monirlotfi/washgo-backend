@@ -14,6 +14,7 @@ import { FirebaseModule } from './firebase/firebase.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { InfobipModule } from './infobip/infobip.module';
 import { AdminModule } from './admin/admin.module';
+import { CarouselModule } from './carousel/carousel.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { AdminModule } from './admin/admin.module';
     CloudinaryModule,
     InfobipModule,
     AdminModule,
+    CarouselModule,
   ],
 })
 export class AppModule {}

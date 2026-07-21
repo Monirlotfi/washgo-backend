@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -31,6 +32,8 @@ export interface NearbyWasher {
 
 @Injectable()
 export class BookingsService {
+  private readonly logger = new Logger(BookingsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
@@ -98,7 +101,7 @@ export class BookingsService {
     });
 
     this.notifyNearbyWashers(booking.id, dto.lat, dto.lng).catch((err) => {
-      console.error('Erreur notif laveurs proches:', err);
+      this.logger.error(`Échec de notification des laveurs proches pour booking ${booking.id}`, err);
     });
 
     return {
@@ -243,15 +246,17 @@ export class BookingsService {
         select: { userId: true },
       });
       if (washer) {
-        this.notifications
-          .enqueue(
+        try {
+          await this.notifications.enqueue(
             NotificationMessages.bookingCancelledByClient({
               userId: washer.userId,
               bookingId,
               reason: reasonLabel,
             }),
-          )
-          .catch((err) => console.error('Erreur notif:', err));
+          );
+        } catch (err) {
+          this.logger.error(`Échec de la notif BOOKING_CANCELLED_BY_CLIENT pour booking ${bookingId}`, err as Error);
+        }
       }
     }
 
@@ -300,19 +305,53 @@ export class BookingsService {
     ]);
 
     if (client && washer) {
-      this.notifications
-        .enqueue(
+      try {
+        await this.notifications.enqueue(
           NotificationMessages.bookingConfirmedByClient({
             userId: washer.userId,
             bookingId,
             clientName: client.fullName,
             priceMAD,
           }),
-        )
-        .catch((err) => console.error('Erreur notif:', err));
+        );
+      } catch (err) {
+        this.logger.error(`Échec de la notif BOOKING_CONFIRMED_BY_CLIENT pour booking ${bookingId}`, err as Error);
+      }
     }
 
     return updated;
+  }
+
+  async findActiveForClient(clientId: string) {
+    const booking = await this.prisma.booking.findFirst({
+      where: {
+        clientId,
+        status: {
+          in: [
+            BookingStatus.PENDING,
+            BookingStatus.ACCEPTED,
+            BookingStatus.ARRIVED,
+            BookingStatus.IN_PROGRESS,
+            BookingStatus.AWAITING_CLIENT_CONFIRMATION,
+          ],
+        },
+      },
+      include: {
+        vehicle: { select: { brand: true, model: true, plate: true, size: true, category: true } },
+        washer: {
+          select: {
+            id: true,
+            avgRating: true,
+            currentLat: true,
+            currentLng: true,
+            user: { select: { fullName: true, phone: true } },
+          },
+        },
+        rating: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return booking ?? null;
   }
 
   async getHistoryForClient(clientId: string) {

@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -19,6 +20,8 @@ import { NotificationPayload } from '../notifications/notification.types';
 
 @Injectable()
 export class OffersService {
+  private readonly logger = new Logger(OffersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
@@ -121,7 +124,7 @@ export class OffersService {
             etaMin: offer.estimatedEtaMin,
           }),
         )
-        .catch((err) => console.error('Erreur notif:', err));
+        .catch((err) => this.logger.error(`Échec de la notif OFFER_RECEIVED pour booking ${bookingId}`, err));
     }
 
     return offer;
@@ -257,7 +260,7 @@ export class OffersService {
     if (notifPayloads.length > 0) {
       this.notifications
         .enqueueMany(notifPayloads)
-        .catch((err) => console.error('Erreur notif:', err));
+        .catch((err) => this.logger.error(`Échec des notifs OFFER_ACCEPTED/OFFER_REJECTED pour booking ${bookingId}`, err));
     }
 
     return updated;
@@ -337,7 +340,7 @@ export class OffersService {
         status: BookingStatus.PENDING,
         expiresAt: { lt: now },
       },
-      select: { id: true },
+      select: { id: true, clientId: true },
     });
 
     for (const b of expired) {
@@ -355,6 +358,14 @@ export class OffersService {
           data: { status: OfferStatus.EXPIRED },
         });
       });
+
+      try {
+        await this.notifications.enqueue(
+          NotificationMessages.bookingExpired({ userId: b.clientId, bookingId: b.id }),
+        );
+      } catch (err) {
+        this.logger.error(`Échec de la notif BOOKING_EXPIRED pour booking ${b.id}`, err as Error);
+      }
     }
 
     return { expiredCount: expired.length };
