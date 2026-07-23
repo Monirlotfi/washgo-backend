@@ -17,6 +17,7 @@ import { calculateEtaMinutes, haversineDistanceMeters } from '../bookings/eta';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationMessages } from '../notifications/notification.messages';
 import { NotificationPayload } from '../notifications/notification.types';
+import { CacheService } from '../cache/cache.service';
 
 @Injectable()
 export class OffersService {
@@ -25,6 +26,7 @@ export class OffersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly cache: CacheService,
   ) {}
 
   /**
@@ -99,6 +101,9 @@ export class OffersService {
         estimatedEtaMin: etaMin,
       },
     });
+
+    // Invalidate available bookings cache for this washer
+    await this.cache.del(`available-bookings:${profile.id}`);
 
     // Notif au client : nouvelle offre reçue
     const [washer, bookingForNotif] = await Promise.all([
@@ -217,6 +222,8 @@ export class OffersService {
 
       return updatedBooking;
     });
+
+    await this.cache.delPattern('available-bookings:*');
 
     // Notifs (hors transaction, fire-and-forget)
     const [client, chosenWasher, rejectedOffers] = await Promise.all([
@@ -366,6 +373,14 @@ export class OffersService {
       } catch (err) {
         this.logger.error(`Échec de la notif BOOKING_EXPIRED pour booking ${b.id}`, err as Error);
       }
+    }
+
+    if (expired.length > 0) {
+      await this.cache.delPattern('available-bookings:*');
+    }
+
+    if (expired.length > 0) {
+      await this.cache.delPattern('available-bookings:*');
     }
 
     return { expiredCount: expired.length };

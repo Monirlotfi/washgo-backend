@@ -15,8 +15,11 @@ import { calculateEtaMinutes, haversineDistanceMeters } from '../bookings/eta';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationMessages } from '../notifications/notification.messages';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { CacheService } from '../cache/cache.service';
+import { GoOnlineDto } from './dto/go-online.dto';
 
 const SEARCH_RADIUS_METERS = 5000;
+const AVAILABLE_BOOKINGS_CACHE_TTL = 15_000;
 
 export interface AvailableBooking {
   booking_id: string;
@@ -45,6 +48,7 @@ export class WasherService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly cloudinary: CloudinaryService,
+    private readonly cache: CacheService,
   ) {}
 
   /** Récupère le WasherProfile associé à un userId */
@@ -56,6 +60,41 @@ export class WasherService {
       throw new NotFoundException('Profil laveur introuvable');
     }
     return profile;
+  }
+
+  /**
+   * Passage en ligne : un seul aller-retour, une seule écriture DB
+   * (statut + position + timestamp), pas de vérification de booking actif.
+   */
+  async goOnline(userId: string, dto: GoOnlineDto) {
+    const profile = await this.getProfileByUserId(userId);
+
+    if (!profile.isVerified) {
+      throw new ForbiddenException(
+        'Votre profil doit être vérifié avant de pouvoir prendre des commandes',
+      );
+    }
+    if (profile.status === WasherStatus.BUSY) {
+      throw new BadRequestException(
+        'Vous ne pouvez pas changer de statut pendant une réservation en cours',
+      );
+    }
+
+    return this.prisma.washerProfile.update({
+      where: { id: profile.id },
+      data: {
+        status: WasherStatus.AVAILABLE,
+        currentLat: dto.lat,
+        currentLng: dto.lng,
+        lastLocationAt: new Date(),
+      },
+      select: {
+        id: true,
+        status: true,
+        currentLat: true,
+        currentLng: true,
+      },
+    });
   }
 
   async updateLocation(userId: string, dto: UpdateLocationDto) {
@@ -119,7 +158,12 @@ export class WasherService {
 
     return this.prisma.washerProfile.update({
       where: { id: profile.id },
-      data: { status: dto.status },
+      data: {
+        status: dto.status,
+        ...(dto.lat !== undefined && dto.lng !== undefined
+          ? { currentLat: dto.lat, currentLng: dto.lng, lastLocationAt: new Date() }
+          : {}),
+      },
       select: {
         id: true,
         status: true,
@@ -134,6 +178,10 @@ export class WasherService {
     if (!profile.currentLat || !profile.currentLng) {
       throw new BadRequestException('Position GPS requise');
     }
+
+    const cacheKey = `available-bookings:${profile.id}`;
+    const cached = await this.cache.get<AvailableBooking[]>(cacheKey);
+    if (cached) return cached;
 
     const bookings = await this.prisma.$queryRaw<AvailableBooking[]>`
       SELECT
@@ -174,7 +222,12 @@ export class WasherService {
       LIMIT 20
     `;
 
+    await this.cache.set(cacheKey, bookings, AVAILABLE_BOOKINGS_CACHE_TTL);
     return bookings;
+  }
+
+  async invalidateAvailableBookingsCache() {
+    await this.cache.delPattern('available-bookings:*');
   }
 
   async acceptBooking(userId: string, bookingId: string) {
@@ -326,6 +379,8 @@ export class WasherService {
       return { booking: updated, reasonLabel, clientId: booking.clientId };
     });
 
+    await this.cache.delPattern('available-bookings:*');
+
     // Notif au client : "votre laveur a annulé"
     this.notifications
       .enqueue(
@@ -337,6 +392,7 @@ export class WasherService {
       )
       .catch((err) => this.logger.error(`Échec de la notif BOOKING_CANCELLED_BY_WASHER pour booking ${bookingId}`, err));
 
+    await this.cache.delPattern('available-bookings:*');
     return result.booking;
   }
 

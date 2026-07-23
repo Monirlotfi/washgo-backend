@@ -8,6 +8,7 @@ import { CarouselGateway } from '../carousel/carousel.gateway';
 import { CreateCarouselDto } from '../carousel/dto/create-carousel.dto';
 import { UpdateCarouselDto } from '../carousel/dto/update-carousel.dto';
 import { WasherStatus } from '@prisma/client';
+import { CacheService } from '../cache/cache.service';
 
 @Injectable()
 export class AdminService {
@@ -18,14 +19,17 @@ export class AdminService {
     private readonly notifications: NotificationsService,
     private readonly cloudinary: CloudinaryService,
     private readonly carouselGateway: CarouselGateway,
+    private readonly cache: CacheService,
   ) {}
 
   /**
    * Liste tous les washers en attente de validation
    */
-  async getPendingWashers() {
+  async getPendingWashers(take = 50, skip = 0) {
     return this.prisma.washerProfile.findMany({
       where: { verificationStatus: 'PENDING' },
+      take,
+      skip,
       include: {
         user: {
           select: {
@@ -82,6 +86,8 @@ export class AdminService {
       },
     });
 
+    await this.cache.del(`user:${washer.user.id}`);
+
     // Notif push au washer
     try {
       await this.notifications.enqueue({
@@ -123,6 +129,8 @@ export class AdminService {
       },
     });
 
+    await this.cache.del(`user:${washer.user.id}`);
+
     // Notif push au washer
     try {
       await this.notifications.enqueue({
@@ -163,6 +171,8 @@ export class AdminService {
       },
     });
 
+    await this.cache.del(`user:${washer.user.id}`);
+
     try {
       await this.notifications.enqueue({
         userId: washer.user.id,
@@ -181,9 +191,11 @@ export class AdminService {
   /**
    * Liste tous les washers (approuvés, rejetés, en attente)
    */
-  async getAllWashers(status?: string) {
+  async getAllWashers(status?: string, take = 50, skip = 0) {
     return this.prisma.washerProfile.findMany({
       where: status ? { verificationStatus: status as any } : undefined,
+      take,
+      skip,
       include: {
         user: {
           select: {

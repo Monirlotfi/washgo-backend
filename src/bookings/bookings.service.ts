@@ -18,6 +18,7 @@ import { getAllPricesForVehicle, getPriceForBooking } from './pricing';
 import { calculateEtaMinutes, haversineDistanceMeters } from './eta';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationMessages } from '../notifications/notification.messages';
+import { CacheService } from '../cache/cache.service';
 
 const SEARCH_RADIUS_METERS = 5000;
 const MAX_WASHERS_TO_RETURN = 5;
@@ -37,6 +38,7 @@ export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly cache: CacheService,
   ) {}
 
   async create(clientId: string, dto: CreateBookingDto) {
@@ -104,6 +106,9 @@ export class BookingsService {
       this.logger.error(`Échec de notification des laveurs proches pour booking ${booking.id}`, err);
     });
 
+    // New booking appeared → clear available bookings cache for nearby washers
+    this.cache.delPattern('available-bookings:*').catch(() => {});
+
     return {
       booking,
       suggestedPrice: priceMAD,
@@ -111,9 +116,11 @@ export class BookingsService {
     };
   }
 
-  async findByClient(clientId: string) {
+  async findByClient(clientId: string, take = 50, skip = 0) {
     return this.prisma.booking.findMany({
       where: { clientId },
+      take,
+      skip,
       include: {
         vehicle: { select: { brand: true, model: true, plate: true, size: true, category: true } },
         washer: {
@@ -354,12 +361,14 @@ export class BookingsService {
     return booking ?? null;
   }
 
-  async getHistoryForClient(clientId: string) {
+  async getHistoryForClient(clientId: string, take = 50, skip = 0) {
     return this.prisma.booking.findMany({
       where: {
         clientId,
         status: { in: [BookingStatus.COMPLETED, BookingStatus.CANCELLED] },
       },
+      take,
+      skip,
       include: {
         vehicle: { select: { brand: true, model: true, plate: true, size: true, category: true } },
         washer: {

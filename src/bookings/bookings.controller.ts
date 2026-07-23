@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { BookingsService } from './bookings.service';
@@ -32,8 +33,12 @@ export class BookingsController {
 
   @Get()
   @Roles(UserRole.CLIENT)
-  findMine(@CurrentUser() user: { id: string }) {
-    return this.bookingsService.findByClient(user.id);
+  findMine(
+    @CurrentUser() user: { id: string },
+    @Query('take') take?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.bookingsService.findByClient(user.id, take ? +take : 50, skip ? +skip : 0);
   }
 
   // Routes spécifiques (préfixes statiques) AVANT les routes paramétrées
@@ -45,8 +50,12 @@ export class BookingsController {
 
   @Get('history')
   @Roles(UserRole.CLIENT)
-  history(@CurrentUser() user: { id: string }) {
-    return this.bookingsService.getHistoryForClient(user.id);
+  history(
+    @CurrentUser() user: { id: string },
+    @Query('take') take?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.bookingsService.getHistoryForClient(user.id, take ? +take : 50, skip ? +skip : 0);
   }
 
   @Get('pricing/:vehicleId')

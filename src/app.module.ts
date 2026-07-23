@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -15,10 +17,16 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { InfobipModule } from './infobip/infobip.module';
 import { AdminModule } from './admin/admin.module';
 import { CarouselModule } from './carousel/carousel.module';
+import { CacheModule } from './cache/cache.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+
+    ThrottlerModule.forRoot([{
+      ttl: 60000,
+      limit: 60,
+    }]),
 
     BullModule.forRootAsync({
       imports: [ConfigModule],
@@ -46,6 +54,7 @@ import { CarouselModule } from './carousel/carousel.module';
       inject: [ConfigService],
     }),
 
+    CacheModule,
     PrismaModule,
     AuthModule,
     VehiclesModule,
@@ -60,6 +69,9 @@ import { CarouselModule } from './carousel/carousel.module';
     InfobipModule,
     AdminModule,
     CarouselModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

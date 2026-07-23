@@ -21,12 +21,21 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 import { WasherCancelBookingDto } from './dto/washer-cancel-booking.dto';
+import { GoOnlineDto } from './dto/go-online.dto';
 
 @Controller('washer')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.WASHER)
 export class WasherController {
   constructor(private readonly washerService: WasherService) {}
+
+  @Post('go-online')
+  goOnline(
+    @CurrentUser() user: { id: string },
+    @Body() dto: GoOnlineDto,
+  ) {
+    return this.washerService.goOnline(user.id, dto);
+  }
 
   @Patch('location')
   updateLocation(
