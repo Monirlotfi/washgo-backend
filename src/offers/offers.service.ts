@@ -175,25 +175,25 @@ export class OffersService {
       );
     }
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const [, , updated] = await this.prisma.$transaction([
       // 1. Accepter cette offre
-      await tx.washerOffer.update({
+      this.prisma.washerOffer.update({
         where: { id: offerId },
         data: { status: OfferStatus.ACCEPTED },
-      });
+      }),
 
       // 2. Rejeter toutes les autres offres sur ce booking
-      await tx.washerOffer.updateMany({
+      this.prisma.washerOffer.updateMany({
         where: {
           bookingId,
           id: { not: offerId },
           status: OfferStatus.PENDING,
         },
         data: { status: OfferStatus.REJECTED },
-      });
+      }),
 
       // 3. Mettre à jour le booking : ACCEPTED + washerId + prix final
-      const updatedBooking = await tx.booking.update({
+      this.prisma.booking.update({
         where: { id: bookingId },
         data: {
           status: BookingStatus.ACCEPTED,
@@ -212,16 +212,14 @@ export class OffersService {
             },
           },
         },
-      });
+      }),
 
       // 4. Le laveur passe en BUSY
-      await tx.washerProfile.update({
+      this.prisma.washerProfile.update({
         where: { id: offer.washerId },
         data: { status: WasherStatus.BUSY },
-      });
-
-      return updatedBooking;
-    });
+      }),
+    ]);
 
     await this.cache.delPattern('available-bookings:*');
 
@@ -351,20 +349,20 @@ export class OffersService {
     });
 
     for (const b of expired) {
-      await this.prisma.$transaction(async (tx) => {
-        await tx.booking.update({
+      await this.prisma.$transaction([
+        this.prisma.booking.update({
           where: { id: b.id },
           data: {
             status: BookingStatus.CANCELLED,
             cancellationReason: 'Aucun laveur choisi dans le délai imparti',
             cancelledBy: 'SYSTEM',
           },
-        });
-        await tx.washerOffer.updateMany({
+        }),
+        this.prisma.washerOffer.updateMany({
           where: { bookingId: b.id, status: OfferStatus.PENDING },
           data: { status: OfferStatus.EXPIRED },
-        });
-      });
+        }),
+      ]);
 
       try {
         await this.notifications.enqueue(

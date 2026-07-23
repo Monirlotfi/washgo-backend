@@ -286,22 +286,19 @@ export class BookingsService {
     const washerId = booking.washerId;
     const priceMAD = booking.priceMAD;
 
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const updatedBooking = await tx.booking.update({
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.booking.update({
         where: { id: bookingId },
         data: { status: BookingStatus.COMPLETED },
-      });
-
-      await tx.washerProfile.update({
+      }),
+      this.prisma.washerProfile.update({
         where: { id: washerId },
         data: {
           status: WasherStatus.AVAILABLE,
           totalBookings: { increment: 1 },
         },
-      });
-
-      return updatedBooking;
-    });
+      }),
+    ]);
 
     const [client, washer] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: clientId } }),
