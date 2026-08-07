@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -7,9 +8,26 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 
+function normalizePlate(plate: string): string {
+  return plate.replace(/[\s-]/g, '').toUpperCase();
+}
+
 @Injectable()
 export class VehiclesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async assertPlateAvailable(plate: string, excludeVehicleId?: string) {
+    const normalized = normalizePlate(plate);
+    const existing = await this.prisma.vehicle.findMany({
+      select: { id: true, plate: true },
+    });
+    const conflict = existing.find(
+      (v) => v.id !== excludeVehicleId && normalizePlate(v.plate) === normalized,
+    );
+    if (conflict) {
+      throw new ConflictException('Cette plaque d\'immatriculation est déjà enregistrée');
+    }
+  }
 
   async create(userId: string, dto: CreateVehicleDto) {
     // Mappe la nouvelle category vers l'ancien size pour compatibilité.
@@ -19,6 +37,8 @@ export class VehiclesService {
       LARGE_VEHICLE: 'SUV',
       MOTORCYCLE: 'SMALL',
     };
+
+    await this.assertPlateAvailable(dto.plate);
 
     return this.prisma.vehicle.create({
       data: {
@@ -54,6 +74,9 @@ export class VehiclesService {
 
   async update(userId: string, vehicleId: string, dto: UpdateVehicleDto) {
     await this.findOneByUser(userId, vehicleId); // vérifie existence + propriété
+    if (dto.plate) {
+      await this.assertPlateAvailable(dto.plate, vehicleId);
+    }
     return this.prisma.vehicle.update({
       where: { id: vehicleId },
       data: dto,
