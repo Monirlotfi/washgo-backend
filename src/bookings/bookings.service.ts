@@ -20,7 +20,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationMessages } from '../notifications/notification.messages';
 import { CacheService } from '../cache/cache.service';
 
-const SEARCH_RADIUS_METERS = 5000;
+const SEARCH_RADIUS_METERS = 500000; // TEMP: élargi pour tests équipe — remettre à ~7000 avant production
 const MAX_WASHERS_TO_RETURN = 5;
 
 export interface NearbyWasher {

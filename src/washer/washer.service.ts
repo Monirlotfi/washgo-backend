@@ -18,7 +18,7 @@ import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { CacheService } from '../cache/cache.service';
 import { GoOnlineDto } from './dto/go-online.dto';
 
-const SEARCH_RADIUS_METERS = 5000;
+const SEARCH_RADIUS_METERS = 500000; // TEMP: élargi pour tests équipe — remettre à ~7000 avant production
 const AVAILABLE_BOOKINGS_CACHE_TTL = 15_000;
 
 export interface AvailableBooking {
