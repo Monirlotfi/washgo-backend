@@ -15,10 +15,18 @@ export class NotificationsProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<NotificationPayload>): Promise<void> {
+  async process(job: Job<NotificationPayload | { ticketId: string; userId: string }>): Promise<void> {
+    if (job.name === 'checkReceipt') {
+      const data = job.data as { ticketId: string; userId: string };
+      this.logger.debug(`Checking receipt for ticket ${data.ticketId} → user ${data.userId}`);
+      await this.notifications.checkReceipt(data);
+      return;
+    }
+
+    const payload = job.data as NotificationPayload;
     this.logger.debug(
-      `Processing notif ${job.id} (${job.data.type}) → user ${job.data.userId}`,
+      `Processing notif ${job.id} (${payload.type}) → user ${payload.userId}`,
     );
-    await this.notifications.sendNow(job.data);
+    await this.notifications.sendNow(payload);
   }
 }

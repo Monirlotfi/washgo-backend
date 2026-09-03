@@ -86,20 +86,18 @@ export class AdminService {
       },
     });
 
-    await this.cache.del(`user:${washer.user.id}`);
-
-    // Notif push au washer
-    try {
-      await this.notifications.enqueue({
+    await Promise.all([
+      this.cache.del(`user:${washer.user.id}`),
+      this.notifications.enqueue({
         userId: washer.user.id,
         type: 'ACCOUNT_APPROVED',
         title: '✅ Compte activé !',
         body: `Bienvenue ${washer.user.fullName} ! Votre compte WashGo est maintenant actif. Vous pouvez commencer à accepter des commandes.`,
         data: { type: 'ACCOUNT_APPROVED' },
-      });
-    } catch (err) {
-      this.logger.error(`Échec de l'envoi de la notif ACCOUNT_APPROVED à ${washer.user.id}`, err as Error);
-    }
+      }).catch((err) => {
+        this.logger.error(`Échec de l'envoi de la notif ACCOUNT_APPROVED à ${washer.user.id}`, err as Error);
+      }),
+    ]);
 
     return updated;
   }
@@ -129,20 +127,18 @@ export class AdminService {
       },
     });
 
-    await this.cache.del(`user:${washer.user.id}`);
-
-    // Notif push au washer
-    try {
-      await this.notifications.enqueue({
+    await Promise.all([
+      this.cache.del(`user:${washer.user.id}`),
+      this.notifications.enqueue({
         userId: washer.user.id,
         type: 'ACCOUNT_REJECTED',
         title: '❌ Demande refusée',
         body: `Votre demande n'a pas pu être validée. Motif : ${reason}`,
         data: { type: 'ACCOUNT_REJECTED' },
-      });
-    } catch (err) {
-      this.logger.error(`Échec de l'envoi de la notif ACCOUNT_REJECTED à ${washer.user.id}`, err as Error);
-    }
+      }).catch((err) => {
+        this.logger.error(`Échec de l'envoi de la notif ACCOUNT_REJECTED à ${washer.user.id}`, err as Error);
+      }),
+    ]);
 
     return updated;
   }
@@ -171,19 +167,18 @@ export class AdminService {
       },
     });
 
-    await this.cache.del(`user:${washer.user.id}`);
-
-    try {
-      await this.notifications.enqueue({
+    await Promise.all([
+      this.cache.del(`user:${washer.user.id}`),
+      this.notifications.enqueue({
         userId: washer.user.id,
         type: 'ACCOUNT_RETRY',
         title: '⚠️ Correction requise',
         body: message,
         data: { type: 'ACCOUNT_RETRY', message },
-      });
-    } catch (err) {
-      this.logger.error(`Échec de l'envoi de la notif ACCOUNT_RETRY à ${washer.user.id}`, err as Error);
-    }
+      }).catch((err) => {
+        this.logger.error(`Échec de l'envoi de la notif ACCOUNT_RETRY à ${washer.user.id}`, err as Error);
+      }),
+    ]);
 
     return updated;
   }

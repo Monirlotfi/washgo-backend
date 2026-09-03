@@ -103,6 +103,7 @@ model WasherProfile {
   retryMessage         String?                // ← note de rejet admin
   verifiedAt           DateTime?               // ← date d'activation
   verifiedBy           String?                 // ← userId admin qui a validé
+  consentGivenAt       DateTime?               // ← date d'acceptation de la notice d'information (RGPD)
 
   avgRating      Float        @default(0)
   totalBookings  Int          @default(0)

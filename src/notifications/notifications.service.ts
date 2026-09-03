@@ -111,10 +111,38 @@ export class NotificationsService implements OnModuleInit {
         this.logger.log(
           `Notif envoyée à ${user.fullName ?? payload.userId} : ${payload.title}`,
         );
+        if (ticket.id) {
+          await this.queue.add(
+            'checkReceipt',
+            { ticketId: ticket.id, userId: payload.userId },
+            { delay: 30000, removeOnComplete: 100, removeOnFail: 500 },
+          );
+        }
       }
     } catch (err: any) {
       this.logger.error(`Erreur réseau Expo : ${err.message}`);
       throw err;
+    }
+  }
+
+  /**
+   * Vérifie le receipt Expo d'un ticket envoyé ~30s plus tôt.
+   * Un ticket "ok" ne garantit pas la livraison réelle — seul le receipt
+   * révèle un token mort (DeviceNotRegistered) côté FCM/APNs.
+   * Appelé par le processor BullMQ (job "checkReceipt").
+   */
+  async checkReceipt(data: { ticketId: string; userId: string }): Promise<void> {
+    const receipts = await this.expo.getPushNotificationReceiptsAsync([data.ticketId]);
+    const receipt = receipts[data.ticketId];
+
+    if (receipt?.status === 'error' && receipt.details?.error === 'DeviceNotRegistered') {
+      this.logger.warn(
+        `Receipt DeviceNotRegistered pour user ${data.userId} — pushToken invalidé`,
+      );
+      await this.prisma.user.update({
+        where: { id: data.userId },
+        data: { pushToken: null },
+      });
     }
   }
 }

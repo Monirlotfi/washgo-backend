@@ -39,11 +39,21 @@ export class RatingsService {
         'Seuls les lavages terminés peuvent être notés',
       );
     }
-    if (!booking.washerId) {
-      throw new BadRequestException('Aucun laveur associé à cette réservation');
-    }
     if (booking.rating) {
       throw new ConflictException('Cette réservation a déjà été notée');
+    }
+
+    // Réservations sans laveur (anciennes/données de test) : on enregistre
+    // simplement la note, sans recalcul de moyenne.
+    if (!booking.washerId) {
+      return this.prisma.rating.create({
+        data: {
+          bookingId,
+          authorId: clientId,
+          score: dto.score,
+          comment: dto.comment,
+        },
+      });
     }
 
     // 2. Transaction : créer le rating + recalculer avgRating du laveur

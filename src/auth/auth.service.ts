@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RegisterClientDto } from './dto/register-client.dto';
 import { RegisterWasherDto } from './dto/register-washer.dto';
 import { LoginDto } from './dto/login.dto';
-import { UserRole } from '@prisma/client';
+import { UserRole, OtpPurpose } from '@prisma/client';
 import { InfobipService } from '../infobip/infobip.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -84,6 +84,7 @@ export class AuthService {
             cinPhotoUrl,
             isVerified: false,
             verificationStatus: 'PENDING',
+            consentGivenAt: new Date(),
           },
         },
       },
@@ -107,15 +108,28 @@ export class AuthService {
     };
   }
 
-  async sendOtp(phone: string) {
-    await this.ensurePhoneIsFree(phone); // évite d'envoyer un SMS pour un numéro déjà inscrit
-    await this.infobip.sendOtp(phone);
+  async sendOtp(phone: string, purpose: OtpPurpose = OtpPurpose.PHONE_VERIFICATION) {
+    if (purpose === OtpPurpose.PASSWORD_RESET) {
+      await this.ensurePhoneExists(phone); // il faut un compte pour réinitialiser son mot de passe
+    } else {
+      await this.ensurePhoneIsFree(phone); // évite d'envoyer un SMS pour un numéro déjà inscrit
+    }
+    await this.infobip.sendOtp(phone, purpose);
     return { message: 'Code envoyé' };
   }
 
-  async verifyOtp(phone: string, code: string) {
-    await this.infobip.verifyOtp(phone, code);
+  async verifyOtp(phone: string, code: string, purpose: OtpPurpose = OtpPurpose.PHONE_VERIFICATION) {
+    await this.infobip.verifyOtp(phone, code, purpose);
     return { message: 'Code vérifié' };
+  }
+
+  async resetPassword(phone: string, newPassword: string) {
+    await this.infobip.consumeVerifiedOtp(phone, OtpPurpose.PASSWORD_RESET);
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({ where: { phone }, data: { passwordHash } });
+
+    return { message: 'Mot de passe mis à jour' };
   }
 
   async login(dto: LoginDto) {
@@ -167,6 +181,11 @@ export class AuthService {
   private async ensurePhoneIsFree(phone: string): Promise<void> {
     const existing = await this.prisma.user.findUnique({ where: { phone } });
     if (existing) throw new ConflictException('Ce numéro est déjà utilisé');
+  }
+
+  private async ensurePhoneExists(phone: string): Promise<void> {
+    const existing = await this.prisma.user.findUnique({ where: { phone } });
+    if (!existing) throw new UnauthorizedException('Aucun compte associé à ce numéro');
   }
 
   private async ensureEmailIsFree(email: string): Promise<void> {

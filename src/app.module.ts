@@ -18,6 +18,7 @@ import { InfobipModule } from './infobip/infobip.module';
 import { AdminModule } from './admin/admin.module';
 import { CarouselModule } from './carousel/carousel.module';
 import { CacheModule } from './cache/cache.module';
+import { DebugModule } from './debug/debug.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { CacheModule } from './cache/cache.module';
     }),
 
     CacheModule,
+    DebugModule,
     PrismaModule,
     AuthModule,
     VehiclesModule,
